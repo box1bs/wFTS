@@ -1,4 +1,4 @@
-module github.com/box1bs/monocle
+module github.com/box1bs/wFTS
 
 go 1.24.3
 

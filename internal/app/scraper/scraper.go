@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 
-	"github.com/box1bs/monocle/internal/app/scraper/lruCache"
-	"github.com/box1bs/monocle/internal/model"
-	"github.com/box1bs/monocle/pkg/logger"
-	"github.com/box1bs/monocle/pkg/parser"
+	"github.com/box1bs/wFTS/internal/app/scraper/lruCache"
+	"github.com/box1bs/wFTS/internal/model"
+	"github.com/box1bs/wFTS/pkg/logger"
+	"github.com/box1bs/wFTS/pkg/parser"
 
 	"context"
 	"net/http"

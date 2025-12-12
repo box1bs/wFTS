@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/box1bs/monocle/internal/app/indexer/textHandling"
-	"github.com/box1bs/monocle/internal/model"
-	"github.com/box1bs/monocle/pkg/logger"
+	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
+	"github.com/box1bs/wFTS/internal/model"
+	"github.com/box1bs/wFTS/pkg/logger"
 )
 
 func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Passage) error {

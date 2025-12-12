@@ -1,4 +1,4 @@
-BINARY_NAME=monocle
+BINARY_NAME=wFTS
 .DEFAULT_GOAL=index
 
 build:

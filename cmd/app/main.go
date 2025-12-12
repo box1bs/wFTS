@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/box1bs/monocle/configs"
-	"github.com/box1bs/monocle/internal/app/indexer"
-	"github.com/box1bs/monocle/internal/app/indexer/textHandling"
-	"github.com/box1bs/monocle/internal/app/searcher"
-	"github.com/box1bs/monocle/internal/model"
-	"github.com/box1bs/monocle/internal/repository"
-	"github.com/box1bs/monocle/internal/tui"
-	"github.com/box1bs/monocle/pkg/logger"
+	"github.com/box1bs/wFTS/configs"
+	"github.com/box1bs/wFTS/internal/app/indexer"
+	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
+	"github.com/box1bs/wFTS/internal/app/searcher"
+	"github.com/box1bs/wFTS/internal/model"
+	"github.com/box1bs/wFTS/internal/repository"
+	"github.com/box1bs/wFTS/internal/tui"
+	"github.com/box1bs/wFTS/pkg/logger"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

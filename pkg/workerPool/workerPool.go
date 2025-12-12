@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/box1bs/monocle/pkg/logger"
+	"github.com/box1bs/wFTS/pkg/logger"
 )
 
 type WorkerPool struct {

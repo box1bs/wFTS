@@ -2,16 +2,17 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 
-	"github.com/box1bs/monocle/configs"
-	"github.com/box1bs/monocle/internal/app/indexer/spellChecker"
-	"github.com/box1bs/monocle/internal/app/indexer/textHandling"
-	"github.com/box1bs/monocle/internal/app/scraper"
-	"github.com/box1bs/monocle/internal/model"
-	"github.com/box1bs/monocle/pkg/logger"
-	"github.com/box1bs/monocle/pkg/workerPool"
+	"github.com/box1bs/wFTS/configs"
+	"github.com/box1bs/wFTS/internal/app/indexer/spellChecker"
+	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
+	"github.com/box1bs/wFTS/internal/app/scraper"
+	"github.com/box1bs/wFTS/internal/model"
+	"github.com/box1bs/wFTS/pkg/logger"
+	"github.com/box1bs/wFTS/pkg/workerPool"
 )
 
 type repository interface {
@@ -70,10 +71,15 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 	defer idx.repository.FlushAll()
 	if a, b, err := idx.repository.UploadSaltArrays(); err != nil {
 		return err
-	} else if a == nil || b == nil {
-		idx.minHash = NewHasher(rand.New(rand.NewSource(1)), nil, nil)
 	} else {
-		idx.minHash = NewHasher(nil, a, b)
+		if a == nil || b == nil {
+			if c, err := idx.repository.GetDocumentsCount(); err != nil {
+				return err
+			} else if c != 0 {
+				return fmt.Errorf("index isn't empty, but salt arrays is")
+			}
+		}
+		idx.minHash = NewHasher(rand.New(rand.NewSource(1)), a, b)
 	}
 	defer idx.repository.SaveSaltArrays(idx.minHash.a, idx.minHash.b)
 

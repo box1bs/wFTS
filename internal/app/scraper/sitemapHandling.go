@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/box1bs/monocle/pkg/logger"
-	"github.com/box1bs/monocle/pkg/parser"
+	"github.com/box1bs/wFTS/pkg/logger"
+	"github.com/box1bs/wFTS/pkg/parser"
 	"golang.org/x/net/html/charset"
 )
 
