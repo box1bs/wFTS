@@ -1,6 +1,5 @@
 package spellChecker
 
-//Использование триграмм отнимает слишком много оперативной памяти
 type SpellChecker struct {
 	maxTypo     int
     NGramCount  int
@@ -13,37 +12,21 @@ func NewSpellChecker(maxTypoLen, ngc int) *SpellChecker {
 	}
 }
 
-type token struct {
-    s       string
-    score   int
-}
-
-func (s *SpellChecker) BestReplacement(s1 string, candidates []string) string {
+func (s *SpellChecker) BestReplacement(s1 string, candidates []string, scores [][2]float64) string {
     if len(candidates) == 0 {
         return s1
     }
-
-    st := []token{}
+    best := candidates[0]
+    bscore := -1e18 // без импорта math
     orig := []rune(s1)
-	for _, candidate := range candidates {
+	for i, candidate := range candidates {
 		distance := s.levenshteinDistance(orig, []rune(candidate))
-        if distance <= s.maxTypo {
-            return candidate
-        }
-		if len(st) == 0 || distance <= st[len(st) - 1].score {
-            st = append(st, token{
-                s: candidate,
-                score: distance,
-            })
+		if score := -1 * float64(distance) + 2 * scores[i][0] + 3 * scores[i][1]; score > bscore { // -dist + log(P(c | left) + 1) + log(P(right | c) + 1)
+            best = candidate
+            bscore = score
         }
 	}
-
-    stackLen := len(st)
-    if st[stackLen - 1].score > s.maxTypo {
-        return s1
-    }
-
-    return st[stackLen - 1].s
+    return best
 }
 
 func (s *SpellChecker) levenshteinDistance(word1 []rune, word2 []rune) int {

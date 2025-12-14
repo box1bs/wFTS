@@ -2,7 +2,7 @@ package indexer
 
 import (
 	"fmt"
-	"sync"
+	"math"
 
 	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
 	"github.com/box1bs/wFTS/internal/model"
@@ -52,6 +52,13 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 		return err
 	}
 
+	bigrams := make(map[[2]uint64]int)
+	for i := 1; i < doc.WordCount; i++ {
+		bigrams[[2]uint64{idx.minHash.Hash64(allTokens[i - 1]), idx.minHash.Hash64(allTokens[i])}]++
+	}
+	if err := idx.repository.UpdateBiFreq(bigrams); err != nil {
+		return err
+	}
 	if err := idx.repository.SaveDocument(doc); err != nil {
 		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error saving document: %v", err))
 		return err
@@ -76,6 +83,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 	if len(stemmed) == 0 {
 		return nil, nil, fmt.Errorf("empty tokens")
 	}
+	lenWords := len(words)
 	stemmedTokens := []string{}
 	wordp := 0
 
@@ -89,7 +97,37 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 			if err != nil {
 				return nil, nil, err
 			}
-			replacement := idx.sc.BestReplacement(words[wordp], conds)
+			lenCandidates := len(conds)
+			scores := make([][2]float64, lenCandidates)
+			left := uint64(0)
+			if i > 0 && i < len(words) {
+				left = idx.minHash.Hash64(words[i - 1])
+			}
+			right := uint64(0)
+			if i + 1 < lenWords {
+				right = idx.minHash.Hash64(words[i + 1])
+			}
+			if right != 0 || left != 0 {
+				for j := range lenCandidates {
+					cond := idx.minHash.Hash64(conds[j])
+					lscore := 0
+					if left != 0 {
+						lscore, err = idx.repository.GetFreq(left, cond)
+						if err != nil {
+							return nil, nil, err
+						}
+					}
+					rscore := 0
+					if right != 0 {
+						rscore, err = idx.repository.GetFreq(cond, right)
+						if err != nil {
+							return nil, nil, err
+						}
+					}
+					scores[j][0], scores[j][1] = math.Log(float64(1 + lscore)), math.Log(float64(1 + rscore)) // снижаем зависимость результата от контекстуального совпадения
+				}
+			}
+			replacement := idx.sc.BestReplacement(words[wordp], conds, scores)
 			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "word '%s' replaced with '%s' in query", words[wordp], replacement))
 			_, stem, err := idx.stemmer.TokenizeAndStem(replacement)
 			if err != nil {
@@ -115,25 +153,16 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 }
 
 func calcSim(curSign [128]uint64, condidates [][128]uint64) int {
-	wg := &sync.WaitGroup{}
-	mu := &sync.Mutex{}
 	result := 0
 	l := len(condidates)
 	for i := range l {
-		wg.Add(1)
 		sum := 0
-		go func() {
-			defer wg.Done()
-			for j := range 128 {
-				if curSign[j] == condidates[i][j] {
-					sum++
-				}
+		for j := range 128 {
+			if curSign[j] == condidates[i][j] {
+				sum++
 			}
-			mu.Lock()
-			result = max(result, sum)
-			mu.Unlock()
-		}()
+		}
+		result = max(result, sum)
 	}
-	wg.Wait()
 	return result
 }

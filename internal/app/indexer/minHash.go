@@ -15,10 +15,11 @@ type minHash struct {
 	a, b [128]uint64
 }
 
-func NewHasher(rsid *rand.Rand, a, b *[128]uint64) *minHash {
+func NewHasher(a, b *[128]uint64) *minHash {
 	if a == nil || b == nil {
 		a = &[128]uint64{}
 		b = &[128]uint64{}
+		rsid := rand.New(rand.NewSource(1))
 
 		for i := range 128 {
 			a[i] = uint64(rsid.Int63n(int64(prime - 1))) + 1
@@ -37,7 +38,7 @@ func (mh *minHash) CreateSignature(rawTokens []string) [128]uint64 {
 	}
 
 	for _, shingle := range shingles {
-		hash := hash64(shingle)
+		hash := mh.Hash64(shingle)
 		for i := range 128 {
 			x := mh.a[i] * hash + mh.b[i]
 			x %= prime
@@ -49,16 +50,16 @@ func (mh *minHash) CreateSignature(rawTokens []string) [128]uint64 {
 	return sign
 }
 
+func (mh *minHash) Hash64(s string) uint64 {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
+}
+
 func getWordNGrams(rawTokens []string) []string {
 	result := []string{}
 	for i := 0; i <= len(rawTokens) - nGramSize; i++ {
 		result = append(result, strings.Join(rawTokens[i: i + nGramSize], ""))
 	}
 	return result
-}
-
-func hash64(s string) uint64 {
-	h := fnv.New64a()
-	h.Write([]byte(s))
-	return h.Sum64()
 }

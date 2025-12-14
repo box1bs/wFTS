@@ -3,7 +3,6 @@ package indexer
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 
 	"github.com/box1bs/wFTS/configs"
@@ -27,6 +26,9 @@ type repository interface {
 	IndexDocShingles([128]uint64) error
 	GetSimilarSignatures([128]uint64) ([][128]uint64, error)
 	FlushAll()
+
+	UpdateBiFreq(map[[2]uint64]int) error
+	GetFreq(uint64, uint64) (int, error)
 
 	SaveSaltArrays([128]uint64, [128]uint64) error
 	UploadSaltArrays() (*[128]uint64, *[128]uint64, error)
@@ -79,7 +81,7 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 				return fmt.Errorf("index isn't empty, but salt arrays is")
 			}
 		}
-		idx.minHash = NewHasher(rand.New(rand.NewSource(1)), a, b)
+		idx.minHash = NewHasher(a, b)
 	}
 	defer idx.repository.SaveSaltArrays(idx.minHash.a, idx.minHash.b)
 

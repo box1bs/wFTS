@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
@@ -157,4 +158,58 @@ func (ir *IndexRepository) GetDocumentsByWord(word string) (map[[32]byte]model.W
 		
 		return nil
 	})
+}
+
+const biK = "big:%d:%d"
+
+func (ir *IndexRepository) UpdateBiFreq(biS map[[2]uint64]int) error {
+	for lr, freq := range biS {
+		if err := ir.DB.Update(func(txn *badger.Txn) error {
+			key := fmt.Appendf(nil, biK, lr[0], lr[1])
+			item, err := txn.Get(key)
+			if err != nil && err != badger.ErrKeyNotFound {
+				return err
+			}
+			if err != badger.ErrKeyNotFound {
+				val, err := item.ValueCopy(nil)
+				if err != nil {
+					return err
+				}
+				freq += decCount(val)
+			}
+			return txn.Set(key, encCount(freq))
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ir *IndexRepository) GetFreq(l, r uint64) (int, error) {
+	freq := 0
+	return freq, ir.DB.View(func(txn *badger.Txn) error {
+		it, err := txn.Get(fmt.Appendf(nil, biK, l, r))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return nil
+			}
+			return err
+		}
+		val, err := it.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		freq = decCount(val)
+		return nil
+	})
+}
+
+func encCount(n int) []byte {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(n))
+	return buf
+}
+
+func decCount(c []byte) int {
+	return int(binary.BigEndian.Uint32(c))
 }
