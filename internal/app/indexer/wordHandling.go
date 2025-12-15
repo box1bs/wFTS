@@ -85,27 +85,27 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 	}
 	lenWords := len(words)
 	stemmedTokens := []string{}
-	wordp := 0
+	wordPos := 0
 
 	for i, lemma := range stemmed {
 		documents, err := idx.repository.GetDocumentsByWord(lemma.Value)
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(documents) == 0 && lemma.Type == textHandling.WORD && len(words) > i {
-			conds, err := idx.repository.GetWordsByNGram(words[wordp], idx.sc.NGramCount)
+		if len(documents) == 0 && lemma.Type == textHandling.WORD {
+			conds, err := idx.repository.GetWordsByNGram(words[wordPos], idx.sc.NGramCount)
 			if err != nil {
 				return nil, nil, err
 			}
 			lenCandidates := len(conds)
 			scores := make([][2]float64, lenCandidates)
 			left := uint64(0)
-			if i > 0 && i < len(words) {
-				left = idx.minHash.Hash64(words[i - 1])
+			if wordPos > 0 {
+				left = idx.minHash.Hash64(words[wordPos - 1])
 			}
 			right := uint64(0)
-			if i + 1 < lenWords {
-				right = idx.minHash.Hash64(words[i + 1])
+			if wordPos + 1 < lenWords {
+				right = idx.minHash.Hash64(words[wordPos + 1])
 			}
 			if right != 0 || left != 0 {
 				for j := range lenCandidates {
@@ -127,13 +127,14 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 					scores[j][0], scores[j][1] = math.Log(float64(1 + lscore)), math.Log(float64(1 + rscore)) // снижаем зависимость результата от контекстуального совпадения
 				}
 			}
-			replacement := idx.sc.BestReplacement(words[wordp], conds, scores)
-			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "word '%s' replaced with '%s' in query", words[wordp], replacement))
+			replacement := idx.sc.BestReplacement(words[wordPos], conds, scores)
+			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "word '%s' replaced with '%s' in query", words[wordPos], replacement))
 			_, stem, err := idx.stemmer.TokenizeAndStem(replacement)
 			if err != nil {
 				return nil, nil, err
 			}
 			if stem[0].Value == "" { // если заменяется на стоп слово
+				wordPos++
 				continue
 			}
 			stemmed[i] = stem[0]
@@ -145,7 +146,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 		stemmedTokens = append(stemmedTokens, stemmed[i].Value)
 		reverthIndex = append(reverthIndex, documents)
 		if lemma.Type == textHandling.WORD {
-			wordp++
+			wordPos++
 		}
 	}
 
