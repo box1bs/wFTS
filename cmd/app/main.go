@@ -39,27 +39,28 @@ func main() {
 		return
 	}
 	
-	in := os.Stdout
-	er := os.Stderr
-	if cfg.InfoLogPath != "-" {
-		in, err = os.Create(cfg.InfoLogPath)
-		if err != nil {
-			panic(err)
-		}
-	}
-	if cfg.ErrorLogPath != "-" {
-		er, err = os.Create(cfg.ErrorLogPath)
-		if err != nil {
-			panic(err)
-		}
-	}
-	defer in.Close()
-	defer er.Close()
+	// in := os.Stdout
+	// er := os.Stderr
+	// if cfg.InfoLogPath != "-" {
+	// 	in, err = os.Create(cfg.InfoLogPath)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }
+	// if cfg.ErrorLogPath != "-" {
+	// 	er, err = os.Create(cfg.ErrorLogPath)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }
+	// defer in.Close()
+	// defer er.Close()
 
-	log := logger.NewLogger(in, er, cfg.LogChannelSize)
+	// log := logger.NewLogger(in, er, cfg.LogChannelSize)
+	log := logger.NewLogger(os.Stdout, os.Stdout, cfg.LogChannelSize)
 	defer log.Close()
 
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, log)
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}
@@ -98,14 +99,13 @@ func main() {
 		panic(err)
 	}
 
-	log.Write(logger.NewMessage(logger.MAIN_LAYER, logger.INFO, "index built with %d documents", count))
 	fmt.Printf("Index built with %d documents. Enter search queries (q to exit):\n", count)
 
 	s := searcher.NewSearcher(log, i, ir, vec)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("> ")
+		fmt.Print("\n> ")
 		query, _ := reader.ReadString('\n')
 		query = strings.TrimSpace(query)
 		if query == "q" {
@@ -135,7 +135,7 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 	log := logger.NewLogger(lc, lc, cfg.LogChannelSize)
 	defer log.Close()
 
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, log)
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}

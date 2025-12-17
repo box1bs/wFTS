@@ -15,10 +15,8 @@ type minHash struct {
 	a, b [128]uint64
 }
 
-func NewHasher(a, b *[128]uint64) *minHash {
-	if a == nil || b == nil {
-		a = &[128]uint64{}
-		b = &[128]uint64{}
+func NewHasher(a, b [128]uint64, reCreateF bool) *minHash {
+	if reCreateF {
 		rsid := rand.New(rand.NewSource(1))
 
 		for i := range 128 {
@@ -27,7 +25,7 @@ func NewHasher(a, b *[128]uint64) *minHash {
 		}
 	}
 
-	return &minHash{a: *a, b: *b}
+	return &minHash{a: a, b: b}
 }
 
 func (mh *minHash) CreateSignature(rawTokens []string) [128]uint64 {
@@ -59,7 +57,7 @@ func (mh *minHash) Hash64(s string) uint64 {
 func getWordNGrams(rawTokens []string) []string {
 	result := []string{}
 	for i := 0; i <= len(rawTokens) - nGramSize; i++ {
-		result = append(result, strings.Join(rawTokens[i: i + nGramSize], ""))
+		result = append(result, strings.Join(rawTokens[i: i + nGramSize], " "))
 	}
 	return result
 }

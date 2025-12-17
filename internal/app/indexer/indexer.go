@@ -31,7 +31,7 @@ type repository interface {
 	GetFreq(uint64, uint64) (int, error)
 
 	SaveSaltArrays([128]uint64, [128]uint64) error
-	UploadSaltArrays() (*[128]uint64, *[128]uint64, error)
+	UploadSaltArrays() ([128]uint64, [128]uint64, error)
 
 	IndexDocumentWords([32]byte, map[string]int, map[string][]model.Position) error
 	GetDocumentsByWord(string) (map[[32]byte]model.WordCountAndPositions, error)
@@ -71,17 +71,17 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 	}
 	defer idx.repository.SaveVisitedUrls(vis)
 	defer idx.repository.FlushAll()
-	if a, b, err := idx.repository.UploadSaltArrays(); err != nil {
+	if a, b, err := idx.repository.UploadSaltArrays(); err != nil && err.Error() != "Key not found" {
 		return err
-	} else {
-		if a == nil || b == nil {
-			if c, err := idx.repository.GetDocumentsCount(); err != nil {
-				return err
-			} else if c != 0 {
-				return fmt.Errorf("index isn't empty, but salt arrays is")
-			}
+	} else if err != nil && err.Error() == "Key not found" {
+		if c, err := idx.repository.GetDocumentsCount(); err != nil {
+			return err
+		} else if c != 0 {
+			return fmt.Errorf("index isn't empty, but salt arrays is")
 		}
-		idx.minHash = NewHasher(a, b)
+		idx.minHash = NewHasher(a, b, true) // пересоздаем
+	} else {
+		idx.minHash = NewHasher(a, b, false) // просто получаем структуру
 	}
 	defer idx.repository.SaveSaltArrays(idx.minHash.a, idx.minHash.b)
 

@@ -3,7 +3,6 @@ BINARY_NAME=wFTS
 
 build:
 	go build -o ./bin/${BINARY_NAME} ./cmd/app/main.go
-	echo "builded successfully"
 
 index: build
 	./bin/${BINARY_NAME}

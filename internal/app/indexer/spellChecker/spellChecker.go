@@ -21,7 +21,7 @@ func (s *SpellChecker) BestReplacement(s1 string, candidates []string, scores []
     orig := []rune(s1)
 	for i, candidate := range candidates {
 		distance := s.levenshteinDistance(orig, []rune(candidate))
-		if score := -1 * float64(distance) + 2 * scores[i][0] + 3 * scores[i][1]; score > bscore { // -dist + log(P(c | left) + 1) + log(P(right | c) + 1)
+		if score := -1 * float64(distance) + 2 * scores[i][0] + 3 * scores[i][1]; score > bscore && distance <= s.maxTypo { // -dist + log(P(c | left) + 1) + log(P(right | c) + 1)
             best = candidate
             bscore = score
         }

@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	chunkSize = 100
 	ngKey = "ng:%s:%04d"
 	shingleKey = "shingle:%s:%04d"
 )
@@ -34,7 +33,7 @@ func (ir *IndexRepository) IndexNGrams(words []string, n int) error {
 			ir.mu.Lock()
 			buf := ir.nGramIndexer.buffer[ng]
 			buf = append(buf, word)
-			if len(buf) >= chunkSize {
+			if len(buf) >= ir.chunkSize {
 				ir.nGramIndexer.counts[ng]++
 				chId := ir.nGramIndexer.counts[ng]
 				toFlush := make([]string, len(buf)) // чтоб не обнулялось
@@ -59,7 +58,7 @@ func (ir *IndexRepository) IndexDocShingles(signature [128]uint64) error {
         copy(lshKey[:], signature[i: i + 4])
 		ir.mu.Lock()
 		buf := append(ir.shingleIndexer.buffer[lshKey], signature)
-		if len(buf) >= chunkSize {
+		if len(buf) >= ir.chunkSize {
 			ir.shingleIndexer.counts[lshKey]++
 			chId := ir.shingleIndexer.counts[lshKey]
 			toFlush := make([][128]uint64, len(buf)) // чтоб не обнулялся
@@ -167,7 +166,7 @@ func (ir *IndexRepository) GetSimilarSignatures(signature [128]uint64) ([][128]u
 		for i := range 4 {
 			strs[i] = strconv.FormatUint(lshKey[i], 10)
 		}
-		prefix := []byte("ng:" + strings.Join(strs[:], ".") + ":")
+		prefix := []byte("shingle:" + strings.Join(strs[:], ".") + ":")
 		if err := ir.DB.View(func(txn *badger.Txn) error {
 			it := txn.NewIterator(badger.DefaultIteratorOptions)
 			defer it.Close()
@@ -289,6 +288,8 @@ func (ir * IndexRepository) UpdateChunkingCounts() error {
 	})
 }
 
+const saltKey = "salt:%s%s"
+
 func (ir *IndexRepository) SaveSaltArrays(a, b [128]uint64) error {
 	abuf := bytes.NewBuffer(nil)
 	if err := binary.Write(abuf, binary.LittleEndian, a); err != nil {
@@ -299,12 +300,12 @@ func (ir *IndexRepository) SaveSaltArrays(a, b [128]uint64) error {
 		return err
 	}
 	return ir.DB.Update(func(txn *badger.Txn) error {
-		return txn.Set(fmt.Appendf(nil, "salt:%s%s", abuf.Bytes(), bbuf.Bytes()), nil)
+		return txn.Set(fmt.Appendf(nil, saltKey, abuf.Bytes(), bbuf.Bytes()), nil)
 	})
 }
 
-func (ir *IndexRepository) UploadSaltArrays() (*[128]uint64, *[128]uint64, error) {
-	a, b := &[128]uint64{}, &[128]uint64{}
+func (ir *IndexRepository) UploadSaltArrays() ([128]uint64, [128]uint64, error) {
+	a, b := [128]uint64{}, [128]uint64{}
 	return a, b, ir.DB.View(func(txn *badger.Txn) error {
 		iter := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer iter.Close()
@@ -323,7 +324,6 @@ func (ir *IndexRepository) UploadSaltArrays() (*[128]uint64, *[128]uint64, error
 			}
 			return nil
 		}
-		a, b = nil, nil
-		return nil
+		return badger.ErrKeyNotFound
 	})
 }

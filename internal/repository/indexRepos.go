@@ -22,10 +22,12 @@ type IndexRepository struct {
 	mu 				*sync.Mutex
 	nGramIndexer	*wordChunkData
 	shingleIndexer	*shingleChunkData
+	chunkSize 		int
 }
 
-func NewIndexRepository(path string, logger *logger.Logger) (*IndexRepository, error) {
+func NewIndexRepository(path string, logger *logger.Logger, chunkSize int) (*IndexRepository, error) {
 	db, err := badger.Open(badger.DefaultOptions(path).WithLoggingLevel(badger.WARNING))
+	db.CacheMaxCost(badger.BlockCache, 64 << 20)
 	if err != nil {
 		return nil, err
 	}
@@ -36,6 +38,7 @@ func NewIndexRepository(path string, logger *logger.Logger) (*IndexRepository, e
 		mu: new(sync.Mutex),
 		nGramIndexer: &wordChunkData{buffer: make(map[string][]string), counts: make(map[string]int)},
 		shingleIndexer: &shingleChunkData{buffer: make(map[[4]uint64][][128]uint64), counts: make(map[[4]uint64]int)},
+		chunkSize: chunkSize,
 	}
 	return ir, ir.UpdateChunkingCounts() // сомнительно потому что нам не нужно это прокидывать если мы не будем индексировать
 }

@@ -17,7 +17,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	allTokens := []string{}
+	allWordTokens := []string{}
 	for _, passage := range passages {
 		orig, stemmed, err := idx.stemmer.TokenizeAndStem(passage.Text)
 		if err != nil {
@@ -27,7 +27,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 			continue
 		}
 
-		allTokens = append(allTokens, orig...)
+		allWordTokens = append(allWordTokens, orig...)
 		for _, w := range stemmed {
 			if w.Type == textHandling.NUMBER || len(w.Value) > 64 {
 				continue
@@ -39,22 +39,24 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 	}
 	doc.WordCount = i
 
-	sign := idx.minHash.CreateSignature(allTokens)
-	conds, err := idx.repository.GetSimilarSignatures(sign)
-	if err != nil {
-		return err
-	}
-	if simRate := calcSim(sign, conds); simRate > 64 { // > 50% нграмм
-		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "finded %d/128 similar page", simRate))
-		return fmt.Errorf("page already indexed")
-	}
-	if err := idx.repository.IndexDocShingles(sign); err != nil {
-		return err
+	if len(allWordTokens) > 4 {
+		sign := idx.minHash.CreateSignature(allWordTokens)
+		conds, err := idx.repository.GetSimilarSignatures(sign)
+		if err != nil {
+			return err
+		}
+		if simRate := calcSim(sign, conds); simRate > 0.8 {
+			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "finded %f similar page: %s, with word tokens len: %d", simRate, doc.URL, len(allWordTokens)))
+			return fmt.Errorf("page already indexed")
+		}
+		if err := idx.repository.IndexDocShingles(sign); err != nil {
+			return err
+		}
 	}
 
 	bigrams := make(map[[2]uint64]int)
-	for i := 1; i < doc.WordCount; i++ {
-		bigrams[[2]uint64{idx.minHash.Hash64(allTokens[i - 1]), idx.minHash.Hash64(allTokens[i])}]++
+	for j := 1; j < len(allWordTokens); j++ {
+		bigrams[[2]uint64{idx.minHash.Hash64(allWordTokens[j - 1]), idx.minHash.Hash64(allWordTokens[j])}]++
 	}
 	if err := idx.repository.UpdateBiFreq(bigrams); err != nil {
 		return err
@@ -63,7 +65,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error saving document: %v", err))
 		return err
 	}
-	if err := idx.repository.IndexNGrams(allTokens, idx.sc.NGramCount); err != nil {
+	if err := idx.repository.IndexNGrams(allWordTokens, idx.sc.NGramCount); err != nil {
 		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error indexing ngrams: %v", err))
 		return err
 	}
@@ -92,7 +94,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(documents) == 0 && lemma.Type == textHandling.WORD {
+		if len(documents) == 0 && lemma.Type == textHandling.WORD { // исправляем только слова
 			conds, err := idx.repository.GetWordsByNGram(words[wordPos], idx.sc.NGramCount)
 			if err != nil {
 				return nil, nil, err
@@ -153,8 +155,8 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 	return stemmedTokens, reverthIndex, err
 }
 
-func calcSim(curSign [128]uint64, condidates [][128]uint64) int {
-	result := 0
+func calcSim(curSign [128]uint64, condidates [][128]uint64) float64 {
+	result := 0.0
 	l := len(condidates)
 	for i := range l {
 		sum := 0
@@ -163,7 +165,8 @@ func calcSim(curSign [128]uint64, condidates [][128]uint64) int {
 				sum++
 			}
 		}
-		result = max(result, sum)
+		sim := float64(sum) / 128.0
+		result = max(result, sim)
 	}
 	return result
 }
