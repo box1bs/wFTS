@@ -1,5 +1,13 @@
 package spellChecker
 
+import "math"
+
+const ( // константы зашумленного канала
+    a = 2
+    b = 3
+    c = 2
+)
+
 type SpellChecker struct {
 	maxTypo     int
     NGramCount  int
@@ -17,11 +25,11 @@ func (s *SpellChecker) BestReplacement(s1 string, candidates []string, scores []
         return s1
     }
     best := candidates[0]
-    bscore := -1e18 // без импорта math
+    bscore := -math.MaxFloat32
     orig := []rune(s1)
 	for i, candidate := range candidates {
 		distance := s.levenshteinDistance(orig, []rune(candidate))
-		if score := -1 * float64(distance) + 2 * scores[i][0] + 3 * scores[i][1]; score > bscore && distance <= s.maxTypo { // -dist + log(P(c | left) + 1) + log(P(right | c) + 1)
+		if score := math.Pow(c, -float64(distance)) * max((a * scores[i][0] + b * scores[i][1]), 0.00001); score > bscore && distance <= s.maxTypo { // c ** -dist * max((a * log(P(c | left) + 1) + b * log(P(right | c) + 1)), const) c, a и b веса контекста, const минимальная вероятность для сочетаний которых нет в базе, чтобы они не отсекались полностью
             best = candidate
             bscore = score
         }
@@ -30,34 +38,35 @@ func (s *SpellChecker) BestReplacement(s1 string, candidates []string, scores []
 }
 
 func (s *SpellChecker) levenshteinDistance(word1 []rune, word2 []rune) int {
-    w1, w2 := len(word1), len(word2)
-    if w1 - w2 > s.maxTypo || w2 - w1 > s.maxTypo {
-        return s.maxTypo + 1
+    l1, l2 := len(word1), len(word2)
+    if l1 == 0 {
+        return l2
     }
-    dp := make([][]int, w1 + 1)
-    for i := range w1 + 1 {
-        dp[i] = make([]int, w2 + 1)
+    if l2 == 0 {
+        return l1
     }
+	dp := make([]int, l2 + 1)
+	for i := 0; i < l2 + 1; i++ {
+		dp[i] = i
+	}
 
-    for i := 1; i <= w1; i++ {
-        dp[i][0] = i
-    }
-    for j := 1; j <= w2; j++ {
-        dp[0][j] = j
-    }
-
-    for i := 1; i <= w1; i++ {
-        for j := 1; j <= w2; j++ {
-            if word1[i - 1] == word2[j - 1] {
-                dp[i][j] = dp[i - 1][j - 1]
-            } else {
-                insert := dp[i - 1][j]
-                delete := dp[i][j - 1]
-                replace := dp[i - 1][j - 1]
-                dp[i][j] = min(delete, insert, replace) + 1
-            }
+	for i := range l1 {
+		dp[0] = i
+		upLeft := dp[0]
+		minRow := i
+		for j := 1; j <= l2; j++ {
+			nextUpLeft := dp[j]
+			if word1[i] == word2[j-1] {
+				dp[j] = upLeft
+			} else {
+				dp[j] = min(dp[j - 1], upLeft, dp[j]) + 1
+			}
+			upLeft = nextUpLeft
+			minRow = min(minRow, dp[j])
+		}
+        if minRow > s.maxTypo {
+            return s.maxTypo + 1
         }
-    }
-
-    return dp[w1][w2]
+	}
+	return dp[l2]
 }
