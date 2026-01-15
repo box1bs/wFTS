@@ -15,7 +15,6 @@ const (
 	NUMBER
 	WHITESPACE
 	SYMBOL
-	ALPHANUMERIC
 	UNKNOWN
 	EMAIL_ADDR
 	URL_ADDR
@@ -37,19 +36,27 @@ type entityToken struct {
 type entityRule struct {
 	Regex 		*regexp.Regexp
 	TokenType 	tokenType
-	Priority 	int
 }
 
-func newEntityRule(regex *regexp.Regexp, tokenType tokenType, priority int) *entityRule {
+func newEntityRule(regex *regexp.Regexp, tokenType tokenType) *entityRule {
 	return &entityRule{
 		Regex: regex,
 		TokenType: tokenType,
-		Priority: priority,
 	}
 }
 
 type tokenizer struct {
 	rules []*entityRule
+}
+
+func newTokenizer() *tokenizer {
+	return &tokenizer{
+		rules: []*entityRule{
+			newEntityRule(complieEmailRegex(), EMAIL_ADDR),
+			newEntityRule(compileIPV4Regex(), IP_V4_ADDR),
+			newEntityRule(complieURLRegex(), URL_ADDR),
+		},
+	}
 }
 
 func complieEmailRegex() *regexp.Regexp {
@@ -98,7 +105,6 @@ func (o *tokenizer) entityTokenize(input string) []token {
 					startPos: start,
 					endPos:   end,
 				},
-				Priority: rule.Priority,
 			})
 		}
 	}
@@ -106,9 +112,6 @@ func (o *tokenizer) entityTokenize(input string) []token {
 	sort.SliceStable(AllPotentialTokens, func(i, j int) bool {
 		if AllPotentialTokens[i].startPos != AllPotentialTokens[j].startPos {
 			return AllPotentialTokens[i].startPos < AllPotentialTokens[j].startPos
-		}
-		if AllPotentialTokens[i].Priority != AllPotentialTokens[j].Priority {
-			return AllPotentialTokens[i].Priority > AllPotentialTokens[j].Priority
 		}
 		return AllPotentialTokens[i].startPos - AllPotentialTokens[i].endPos > AllPotentialTokens[j].startPos - AllPotentialTokens[j].endPos
 	})
@@ -158,24 +161,10 @@ func (o *tokenizer) fragmentTokenize(textFragment string, globalStartPos int) []
 			currentTokenBuffer.WriteRune(r)
 			currentTokenType = rType
 		} else {
-			shouldCombineNow := false
-			if (currentTokenType == WORD && rType == NUMBER) ||
-				(currentTokenType == NUMBER && rType == WORD) {
-				shouldCombineNow = true
-			}
-
-			isContinuingAlphanumeric := false
-			if currentTokenType == ALPHANUMERIC && (rType == WORD || rType == NUMBER) {
-				isContinuingAlphanumeric = true
-			}
-
-			if rType == currentTokenType || shouldCombineNow || isContinuingAlphanumeric {
+			if rType == currentTokenType {
 				currentTokenBuffer.WriteRune(r)
-				if shouldCombineNow {
-					currentTokenType = ALPHANUMERIC
-				}
 			} else {
-				if currentTokenBuffer.Len() > 0 {
+				if currentTokenBuffer.Len() > 0 && currentTokenType != WHITESPACE {
 					tokens = append(tokens, token{
 						Value: currentTokenBuffer.String(),
 						Type:  currentTokenType,
@@ -191,12 +180,12 @@ func (o *tokenizer) fragmentTokenize(textFragment string, globalStartPos int) []
 		}
 	}
 
-	if currentTokenBuffer.Len() > 0 {
+	if currentTokenBuffer.Len() > 0 && currentTokenType != WHITESPACE {
 		tokens = append(tokens, token{
 			Type:     currentTokenType,
 			Value:    currentTokenBuffer.String(),
-			startPos: startPos,
-			endPos:   startPos + currentTokenBuffer.Len(),
+			startPos: globalStartPos + startPos,
+			endPos:   globalStartPos + startPos + currentTokenBuffer.Len(),
 		})
 	}
 

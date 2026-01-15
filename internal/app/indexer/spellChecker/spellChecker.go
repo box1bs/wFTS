@@ -20,24 +20,57 @@ func NewSpellChecker(maxTypoLen, ngc int) *SpellChecker {
 	}
 }
 
-func (s *SpellChecker) BestReplacement(s1 string, candidates []string, scores [][2]float64) string {
+func (s *SpellChecker) BestReplacement(in *[]string, index int, candidates []string, scores [][2]float64) {
     if len(candidates) == 0 {
-        return s1
+        return
     }
     best := candidates[0]
     bscore := -math.MaxFloat32
-    orig := []rune(s1)
+    orig := []rune((*in)[index])
 	for i, candidate := range candidates {
-		distance := s.levenshteinDistance(orig, []rune(candidate))
-		if score := math.Pow(c, -float64(distance)) * max((a * scores[i][0] + b * scores[i][1]), 0.00001); score > bscore && distance <= s.maxTypo { // c ** -dist * max((a * log(P(c | left) + 1) + b * log(P(right | c) + 1)), const) c, a и b веса контекста, const минимальная вероятность для сочетаний которых нет в базе, чтобы они не отсекались полностью
+		if score, distance := s.noisyChannelScore(orig, []rune(candidate), scores[i][0], scores[i][1]); score > bscore && distance < s.maxTypo {
             best = candidate
             bscore = score
         }
 	}
-    return best
+	if bscore != -math.MaxFloat32 {
+		(*in)[index] = best
+		return
+	}
+
+	set := map[string]int{}
+	for i, candidate := range candidates {
+		set[candidate] = i
+	}
+	repl := [2]string{}
+	for i := 3; i < 10; i++ {
+		part1 := string(orig[:i])
+		if _, ex := set[part1]; !ex {
+			continue
+		}
+		part2 := string(orig[i:])
+		if _, ex := set[part2]; !ex {
+			continue
+		}
+		if score := math.Log(max((a * scores[set[part1]][0] + b * scores[set[part2]][1]), 0.00001)); score > bscore {
+			bscore = score
+			repl[0], repl[1] = part1, part2
+		}
+	}
+	*in = append(*in, "")
+	(*in)[index] = repl[0]
+	for i := index + 1; i < len(*in) - 1; i++ {
+		(*in)[i + 1] = (*in)[i]
+	}
+	(*in)[index + 1] = repl[1]
 }
 
-func (s *SpellChecker) levenshteinDistance(word1 []rune, word2 []rune) int {
+func (s *SpellChecker) noisyChannelScore(word1, word2 []rune, probabilityLog1, probabilityLog2 float64) (float64, int) {
+	ld := levenshteinDistance(word1, word2, s.maxTypo)
+	return math.Pow(c, -float64(ld)) * max((a * probabilityLog1 + b * probabilityLog2), 0.00001), ld
+}
+
+func levenshteinDistance(word1, word2 []rune, maxTypo int) int {
     l1, l2 := len(word1), len(word2)
     if l1 == 0 {
         return l2
@@ -64,8 +97,8 @@ func (s *SpellChecker) levenshteinDistance(word1 []rune, word2 []rune) int {
 			upLeft = nextUpLeft
 			minRow = min(minRow, dp[j])
 		}
-        if minRow > s.maxTypo {
-            return s.maxTypo + 1
+        if minRow > maxTypo {
+            return maxTypo + 1
         }
 	}
 	return dp[l2]

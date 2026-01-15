@@ -110,18 +110,8 @@ func NewEnglishStemmer() *EnglishStemmer {
 			"ize":   "", // bowdlerize -> bowdler
 		},
 		stopWords: newStopWords(),
-		tokenizer: &tokenizer{
-			rules: []*entityRule{
-				newEntityRule(complieEmailRegex(), EMAIL_ADDR, 2),
-				newEntityRule(compileIPV4Regex(), IP_V4_ADDR, 1),
-				newEntityRule(complieURLRegex(), URL_ADDR, 2),
-			},
-		},
+		tokenizer: newTokenizer(),
 	}
-}
-
-func (s *EnglishStemmer) hasSuffix(word, suffix string) bool {
-	return len(word) > len(suffix) && strings.HasSuffix(word, suffix)
 }
 
 func (s *EnglishStemmer) measure(word string) int {
@@ -154,7 +144,7 @@ func (s *EnglishStemmer) TokenizeAndStem(text string) ([]string, []token, error)
 				wordTokens = append(wordTokens, t.Value)
 				stemmedTokens = append(stemmedTokens, token{Type: WORD, Value: stemmed})
 			}
-		} else if t.Type == ALPHANUMERIC || t.Type == NUMBER || t.Type == EMAIL_ADDR || t.Type == URL_ADDR {
+		} else if t.Type != UNKNOWN && t.Type != WHITESPACE {
 			stemmedTokens = append(stemmedTokens, t)
 		}
 	}
@@ -172,39 +162,24 @@ func (s *EnglishStemmer) stem(word string) string {
     }
     
     for suffix, replacement := range s.step1aRules {
-        if s.hasSuffix(word, suffix) {
+        if strings.HasSuffix(word, suffix) {
             word = strings.TrimSuffix(word, suffix) + replacement
             break
         }
     }
     
-    for suffix, replacement := range s.step1bRules {
-        if s.hasSuffix(word, suffix) && s.measure(strings.TrimSuffix(word, suffix)) > 0 {
+    word = s.trimRuleSuffix(word, s.step1bRules, 0)
+	word = s.trimRuleSuffix(word, s.step2Rules, 0)
+	word = s.trimRuleSuffix(word, s.step3Rules, 0)
+    return s.trimRuleSuffix(word, s.step4Rules, 1)
+}
+
+func (s *EnglishStemmer) trimRuleSuffix(word string, rule map[string]string, treshold int) string {
+	for suffix, replacement := range rule {
+        if strings.HasSuffix(word, suffix) && s.measure(strings.TrimSuffix(word, suffix)) > treshold {
             word = strings.TrimSuffix(word, suffix) + replacement
-            break
+            return word
         }
     }
-    
-    for suffix, replacement := range s.step2Rules {
-        if s.hasSuffix(word, suffix) && s.measure(strings.TrimSuffix(word, suffix)) > 0 {
-            word = strings.TrimSuffix(word, suffix) + replacement
-            break
-        }
-    }
-    
-    for suffix, replacement := range s.step3Rules {
-        if s.hasSuffix(word, suffix) && s.measure(strings.TrimSuffix(word, suffix)) > 0 {
-            word = strings.TrimSuffix(word, suffix) + replacement
-            break
-        }
-    }
-    
-    for suffix, replacement := range s.step4Rules {
-        if s.hasSuffix(word, suffix) && s.measure(strings.TrimSuffix(word, suffix)) > 1 {
-            word = strings.TrimSuffix(word, suffix) + replacement
-            break
-        }
-    }
-    
-    return word
+	return word
 }

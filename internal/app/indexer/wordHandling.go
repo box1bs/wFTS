@@ -82,19 +82,22 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 	defer idx.mu.RUnlock()
 	reverthIndex := []map[[32]byte]model.WordCountAndPositions{}
 	words, stemmed, err := idx.stemmer.TokenizeAndStem(text)
-	if len(stemmed) == 0 {
+	lenStem := len(stemmed)
+	if lenStem == 0 {
 		return nil, nil, fmt.Errorf("empty tokens")
 	}
 	lenWords := len(words)
 	stemmedTokens := []string{}
 	wordPos := 0
+	isTwoWordCorrection := false
+	lastDoubleCorrPointer := lenStem
 
-	for i, lemma := range stemmed {
-		documents, err := idx.repository.GetDocumentsByWord(lemma.Value)
+	for i := 0; i < lenStem; i++ {
+		documents, err := idx.repository.GetDocumentsByWord(stemmed[i].Value)
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(documents) == 0 && lemma.Type == textHandling.WORD { // исправляем только слова
+		if len(documents) == 0 && stemmed[i].Type == textHandling.WORD { // исправляем только слова
 			conds, err := idx.repository.GetWordsByNGram(words[wordPos], idx.sc.NGramCount)
 			if err != nil {
 				return nil, nil, err
@@ -129,9 +132,12 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 					scores[j][0], scores[j][1] = math.Log(float64(1 + lscore)), math.Log(float64(1 + rscore)) // снижаем зависимость результата от контекстуального совпадения
 				}
 			}
-			replacement := idx.sc.BestReplacement(words[wordPos], conds, scores)
-			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "word '%s' replaced with '%s' in query", words[wordPos], replacement))
-			_, stem, err := idx.stemmer.TokenizeAndStem(replacement)
+			tmp := lenWords
+			tmpArr := make([]string, lenWords)
+			copy(tmpArr, words)
+			idx.sc.BestReplacement(&words, wordPos, conds, scores)
+			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "words '%s' replaced with '%s' in query", words, words))
+			_, stem, err := idx.stemmer.TokenizeAndStem(words[wordPos])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -144,11 +150,38 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 			if err != nil {
 				return nil, nil, err
 			}
+			if tmp > lenWords {
+				wordPos++
+				lenWords++
+				_, stem, err := idx.stemmer.TokenizeAndStem(words[wordPos])
+				if err != nil {
+					return nil, nil, err
+				}
+				stemmed = append(stemmed, stem[0])
+				docs, err := idx.repository.GetDocumentsByWord(stem[0].Value)
+				if err != nil {
+					return nil, nil, err
+				}
+				for k, v := range docs {
+					if _, ex := documents[k]; !ex {
+						documents[k] = v
+						continue
+					}
+					tmp := model.WordCountAndPositions{}
+					tmp.Positions = append(documents[k].Positions, v.Positions...)
+					tmp.Count = documents[k].Count + v.Count
+					documents[k] = tmp
+				}
+			}
 		}
 		stemmedTokens = append(stemmedTokens, stemmed[i].Value)
 		reverthIndex = append(reverthIndex, documents)
-		if lemma.Type == textHandling.WORD {
+		if stemmed[i].Type == textHandling.WORD {
 			wordPos++
+		}
+		if isTwoWordCorrection {
+			stemmedTokens = append(stemmedTokens, stemmed[lastDoubleCorrPointer].Value)
+			lastDoubleCorrPointer++
 		}
 	}
 

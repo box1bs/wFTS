@@ -247,8 +247,6 @@ func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, err
 	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
-		builder.WriteString(scanner.Text())
-
 		select {
 		case <-ws.globalCtx.Done():
 			return builder.String(), nil

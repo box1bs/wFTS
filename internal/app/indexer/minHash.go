@@ -57,7 +57,9 @@ func (mh *minHash) Hash64(s string) uint64 {
 func getWordNGrams(rawTokens []string) []string {
 	result := []string{}
 	for i := 0; i <= len(rawTokens) - nGramSize; i++ {
-		result = append(result, strings.Join(rawTokens[i: i + nGramSize], " "))
+		gram := make([]string, nGramSize)
+		copy(gram, rawTokens[i: i + nGramSize])
+		result = append(result, strings.Join(gram, " "))
 	}
 	return result
 }
