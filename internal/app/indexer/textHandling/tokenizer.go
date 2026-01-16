@@ -173,6 +173,7 @@ func (o *tokenizer) fragmentTokenize(textFragment string, globalStartPos int) []
 					})
 				}
 
+				startPos += currentTokenBuffer.Len()
 				currentTokenBuffer.Reset()
 				currentTokenBuffer.WriteRune(r)
 				currentTokenType = rType

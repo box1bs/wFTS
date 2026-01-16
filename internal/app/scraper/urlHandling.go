@@ -55,5 +55,5 @@ func normalizeUrl(rawUrl string) (string, error) {
 }
 
 func isSameOrigin(rawURL *url.URL, baseURL *url.URL) bool {
-	return strings.Contains(baseURL.Hostname(), rawURL.Hostname())
+	return strings.Contains(strings.Split(baseURL.Hostname(), ":")[0], strings.Split(rawURL.Hostname(), ":")[0])
 }
