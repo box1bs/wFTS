@@ -34,15 +34,15 @@ func calcCosineSimilarity(vec1, vec2 []float64) float64 {
 func calcEuclidianDistance(v1, v2 []float64) float64 {
 	tmp := 0.0
 	for i := range v1 {
-		tmp += math.Pow(v2[i]-v1[i], 2.0)
+		tmp += math.Pow(v2[i] - v1[i], 2.0)
 	}
 	return math.Sqrt(tmp)
 }
 
-func culcBM25(idf float64, tf float64, doc *model.Document, avgLen float64) float64 {
+func calcBM25(idf float64, tf float64, doc *model.Document, avgLen float64) float64 {
 	k1 := 1.2
 	b := 0.75
-	return idf * (tf * (k1 + 1)) / (tf + k1*(1-b+b*float64(doc.WordCount)/avgLen))
+	return idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * float64(doc.WordCount) / avgLen))
 }
 
 func getMinQueryDistInDoc(positions []*[]model.Position, lenQuery int) int {
@@ -166,5 +166,5 @@ func boyerMoorAlgorithm(url string, queryWords []string) (bool, float64) {
 		}
 	}
 
-	return wordInUrl > 0.0, math.Log(1.0 + wordInUrl)
+	return wordInUrl > 0.0, math.Log(1 + wordInUrl)
 }

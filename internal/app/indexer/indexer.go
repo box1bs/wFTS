@@ -108,10 +108,10 @@ func (idx *indexer) GetAVGLen() (float64, error) {
 	}
 
 	for _, doc := range docs {
-		wordCount += int(doc.WordCount)
+		wordCount += doc.WordCount
 	}
 
-	return float64(wordCount) / float64(len(docs)), nil
+	return float64(wordCount) / (float64(len(docs)) + 1), nil
 }
 
 func (idx *indexer) SaveUrlsToBank(key [32]byte, data []byte) error {

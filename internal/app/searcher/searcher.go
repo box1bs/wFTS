@@ -66,16 +66,14 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	
-	rank := make(map[[32]byte]requestRanking)
-
 	words, index, err := s.idx.HandleTextQuery(query)
 	if err != nil {
 		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.CRITICAL_ERROR, "handling words error: %v", err))
 		return nil
 	}
-
+	
 	queryLen := len(words)
-
+	
 	avgLen, err := s.idx.GetAVGLen()
 	if err != nil {
 		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.ERROR, "%v", err))
@@ -87,12 +85,14 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.ERROR, "%v", err))
 		return nil
 	}
-
+	
+	rank := make(map[[32]byte]requestRanking)
 	result := make([]*model.Document, 0)
 	alreadyIncluded := make(map[[32]byte]struct{})
 	var wg sync.WaitGroup
 	var rankMu sync.RWMutex
 	var resultMu sync.Mutex
+	tokenFreq := make([]int, queryLen)
 	done := make(chan struct{})
 
 	for i := range words {
@@ -100,8 +100,11 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		go func(i int) {
 			defer wg.Done()
 	
-			idf := math.Log(float64(length) / float64(len(index[i]) + 1)) + 1.0
+			idf := math.Log(float64(length) / float64(len(index[i]) + 1)) + 1
 			s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "len documents with word: %s, %d", words[i], len(index[i])))
+			for _, item := range index[i] {
+				tokenFreq[i] += item.Count
+			}
 	
 			for docID, item := range index[i] {
 				rankMu.RLock()
@@ -114,13 +117,11 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				rankMu.RUnlock()
 				
 				rankMu.Lock()
-				r, ex := rank[docID]
-				if !ex {
-					rank[docID] = requestRanking{}
-				}
+				r := rank[docID]
 				r.SumTokenInPackage += item.Count
-				r.tf_idf += float64(doc.WordCount) * idf
-				r.bm25 += culcBM25(idf, float64(item.Count), doc, avgLen)
+				tf := float64(tokenFreq[i]) / float64(doc.WordCount)
+				r.tf_idf += tf * idf
+				r.bm25 += calcBM25(idf, tf, doc, avgLen)
 				if r.TermProximity == 0 {
 					positions := []*[]model.Position{}
 					coverage := 0.0

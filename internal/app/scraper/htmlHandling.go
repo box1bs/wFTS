@@ -44,19 +44,14 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 
 	c, cancel := context.WithTimeout(ctx, deadlineTime)
 	defer cancel()
-    links, passages := ws.parseHTMLStream(c, doc, cur, rls, gd)
+    links, passages, rawText := ws.parseHTMLStream(c, doc, cur, rls, gd)
 	if len(links) != 0 {
 		ws.lru.Put(hashed, links)
-	}
-
-	fullText := strings.Builder{}
-	for _, passage := range passages {
-		fullText.WriteString(passage.Text)
 	}
 	
 	var ok bool
 	select {
-	case document.WordVec, ok = <-ws.putDocReq(fullText.String(), ws.globalCtx):
+	case document.WordVec, ok = <-ws.putDocReq(rawText, ws.globalCtx):
 		if !ok {
 			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.CRITICAL_ERROR, "error vectorizing document for page: %s", cur))
 			return nil, fmt.Errorf("error vectoriing document for page: %s", cur)
@@ -69,10 +64,11 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 	return links, ws.idx.HandleDocumentWords(document, passages)
 }
 
-func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, rules *parser.RobotsTxt, currentDeep int) (links []*linkToken, pasages []model.Passage) {
+func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, rules *parser.RobotsTxt, currentDeep int) (links []*linkToken, pasages []model.Passage, fullText string) {
 	tokenizer := html.NewTokenizer(strings.NewReader(htmlContent))
 	var tagStack [][2]byte
 	var garbageTagStack []string
+	var rawTextBuilder strings.Builder 
 	links = make([]*linkToken, 0)
 	visit := make([]*linkToken, 0)
 	
@@ -87,6 +83,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 				if len(visit) != 0 {
 					links = append(links, visit...)
 				}
+				fullText = rawTextBuilder.String()
 				return
 			default:
 			}
@@ -186,6 +183,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 			if len(tagStack) > 0 {
 				text := strings.TrimSpace(string(tokenizer.Text()))
 				if text != "" {
+					rawTextBuilder.WriteString(text)
 					pasages = append(pasages, model.NewTypeTextObj[model.Passage]('h', text, 0))
 				}
 				continue
@@ -193,6 +191,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 
 			text := strings.TrimSpace(string(tokenizer.Text()))
 			if text != "" {
+				rawTextBuilder.WriteString(text)
 				pasages = append(pasages, model.NewTypeTextObj[model.Passage]('b', text, 0))
 			}
 
@@ -201,6 +200,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 	if len(visit) != 0 {
 		links = append(links, visit...)
 	}
+	fullText = rawTextBuilder.String()
 	return
 }
 
