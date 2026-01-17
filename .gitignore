@@ -3,8 +3,8 @@ internal/app/semantic_embeddings/.venv/
 
 internal/test
 
-bin
-data
+.bin
+.data
 logs
 
 dataset.csv

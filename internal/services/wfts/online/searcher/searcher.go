@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/box1bs/wFTS/internal/model"
-	"github.com/box1bs/wFTS/pkg/logger"
+	"wfts/internal/model"
+	"wfts/pkg/logger"
 )
 
 type index interface {

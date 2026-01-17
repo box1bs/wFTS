@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/box1bs/wFTS/internal/model"
+	"wfts/internal/model"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

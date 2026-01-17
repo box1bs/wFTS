@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/box1bs/wFTS/configs"
-	"github.com/box1bs/wFTS/internal/app/indexer/spellChecker"
-	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
-	"github.com/box1bs/wFTS/internal/app/scraper"
-	"github.com/box1bs/wFTS/internal/model"
-	"github.com/box1bs/wFTS/pkg/logger"
-	"github.com/box1bs/wFTS/pkg/workerPool"
+	"wfts/configs"
+	"wfts/internal/services/wfts/offline/indexer/spellChecker"
+	"wfts/internal/services/wfts/offline/indexer/textHandling"
+	"wfts/internal/services/wfts/offline/scraper"
+	"wfts/internal/model"
+	"wfts/pkg/logger"
+	"wfts/internal/utils/workerPool"
 )
 
 type repository interface {

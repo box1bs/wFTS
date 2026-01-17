@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/box1bs/wFTS/pkg/logger"
+	"wfts/pkg/logger"
 	"github.com/dgraph-io/badger/v3"
 )
 

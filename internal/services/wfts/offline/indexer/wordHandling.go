@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
-	"github.com/box1bs/wFTS/internal/model"
-	"github.com/box1bs/wFTS/pkg/logger"
+	"wfts/internal/services/wfts/offline/indexer/textHandling"
+	"wfts/internal/model"
+	"wfts/pkg/logger"
 )
 
 func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Passage) error {

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/box1bs/wFTS/pkg/logger"
+	"wfts/pkg/logger"
 )
 
 func TestHtmlGetter(t *testing.T) {

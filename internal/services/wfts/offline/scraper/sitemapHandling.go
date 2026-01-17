@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/box1bs/wFTS/pkg/logger"
-	"github.com/box1bs/wFTS/pkg/parser"
+	"wfts/pkg/logger"
+	"wfts/internal/utils/parser"
 	"golang.org/x/net/html/charset"
 )
 

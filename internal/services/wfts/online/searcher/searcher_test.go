@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/box1bs/wFTS/internal/model"
+	"wfts/internal/model"
 )
 
 func TestGetMinQueryDistInDoc(t *testing.T) {

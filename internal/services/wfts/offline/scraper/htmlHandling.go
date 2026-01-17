@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/box1bs/wFTS/internal/model"
-	"github.com/box1bs/wFTS/pkg/logger"
-	"github.com/box1bs/wFTS/pkg/parser"
+	"wfts/internal/model"
+	"wfts/pkg/logger"
+	"wfts/internal/utils/parser"
 	"golang.org/x/net/html"
 )
 

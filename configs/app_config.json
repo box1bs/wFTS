@@ -36,7 +36,7 @@
     ],
     "info_log_path" : "./logs/info.log",
     "error_log_path" : "./logs/errors.log",
-    "index_path" : "./data/index",
+    "index_path" : "./.data/index",
     "model_sever_link" : "http://127.0.0.1:50920",
     "tui_border_color" : "#fffff0",
     "log_channel_size" : 10000,

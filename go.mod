@@ -1,4 +1,4 @@
-module github.com/box1bs/wFTS
+module wfts
 
 go 1.24.3
 

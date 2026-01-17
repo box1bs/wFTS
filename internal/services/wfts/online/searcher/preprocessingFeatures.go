@@ -6,7 +6,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/box1bs/wFTS/internal/model"
+	"wfts/internal/model"
 )
 
 func calcCosineSimilarity(vec1, vec2 []float64) float64 {

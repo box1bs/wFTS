@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/box1bs/wFTS/configs"
-	"github.com/box1bs/wFTS/internal/app/indexer"
-	"github.com/box1bs/wFTS/internal/app/indexer/textHandling"
-	"github.com/box1bs/wFTS/internal/app/searcher"
-	"github.com/box1bs/wFTS/internal/model"
-	"github.com/box1bs/wFTS/internal/repository"
-	"github.com/box1bs/wFTS/internal/tui"
-	"github.com/box1bs/wFTS/pkg/logger"
+	"wfts/configs"
+	"wfts/internal/services/wfts/offline/indexer"
+	"wfts/internal/services/wfts/offline/indexer/textHandling"
+	"wfts/internal/services/wfts/online/searcher"
+	"wfts/internal/model"
+	"wfts/internal/repository"
+	"wfts/internal/services/tui"
+	"wfts/pkg/logger"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -39,25 +39,24 @@ func main() {
 		return
 	}
 	
-	// in := os.Stdout
-	// er := os.Stderr
-	// if cfg.InfoLogPath != "-" {
-	// 	in, err = os.Create(cfg.InfoLogPath)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
-	// if cfg.ErrorLogPath != "-" {
-	// 	er, err = os.Create(cfg.ErrorLogPath)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
-	// defer in.Close()
-	// defer er.Close()
+	in := os.Stdout
+	er := os.Stderr
+	if cfg.InfoLogPath != "-" {
+		in, err = os.Create(cfg.InfoLogPath)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if cfg.ErrorLogPath != "-" {
+		er, err = os.Create(cfg.ErrorLogPath)
+		if err != nil {
+			panic(err)
+		}
+	}
+	defer in.Close()
+	defer er.Close()
 
-	// log := logger.NewLogger(in, er, cfg.LogChannelSize)
-	log := logger.NewLogger(os.Stdout, os.Stdout, cfg.LogChannelSize)
+	log := logger.NewLogger(in, er, cfg.LogChannelSize)
 	defer log.Close()
 
 	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)

@@ -6,7 +6,7 @@ import (
 
 	"slices"
 
-	"github.com/box1bs/wFTS/internal/model"
+	"wfts/internal/model"
 	"github.com/dgraph-io/badger/v3"
 )
 
