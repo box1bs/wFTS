@@ -24,7 +24,7 @@ type indexer interface {
 }
 
 type workerPool interface {
-	Submit(func())
+	Submit(model.CrawlNode)
 	Wait()
 	Stop()
 }
@@ -90,7 +90,7 @@ func (ws *WebScraper) Run() {
 			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error parsing link: %v", err))
 			continue
 		}
-		ws.pool.Submit(func() {
+		ws.pool.Submit(model.CrawlNode{Activation: func() {
 			ctx, cancel := context.WithTimeout(ws.globalCtx, crawlTime)
 			defer cancel()
 			ws.rlMu.Lock()
@@ -98,7 +98,7 @@ func (ws *WebScraper) Run() {
 			ws.rlMap[parsed.Host] = rl
 			ws.rlMu.Unlock()
 			ws.ScrapeWithContext(ctx, parsed, nil, 0)
-		})
+		}})
 	}
 	ws.pool.Wait()
 	ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.DEBUG, "waiting for stoppnig worker pool"))
@@ -186,7 +186,7 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 			rls = nil
         }
 
-        ws.pool.Submit(func() {
+        ws.pool.Submit(model.CrawlNode{Activation: func() {
 			ws.rlMu.Lock()
 			if ws.rlMap[link.Link.Host] == nil {
 				ws.rlMap[link.Link.Host] = NewRateLimiter(DefaultDelay)
@@ -195,6 +195,9 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 			defer cancel()
 			ws.rlMu.Unlock()
 			ws.ScrapeWithContext(c, link.Link, rls, depth+1)
+		},
+			Depth: depth,
+			SameDomain: link.SameDomain,
 		})
     }
 }

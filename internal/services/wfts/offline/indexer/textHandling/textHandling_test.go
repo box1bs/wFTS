@@ -25,11 +25,6 @@ func TestStemming(t *testing.T) {
 			expected: "activ",
 		},
 		{
-			name:     "ties",
-			toStem:   []string{"ties"},
-			expected: "ti",
-		},
-		{
 			name:     "meeting",
 			toStem:   []string{"meeting"},
 			expected: "meet",

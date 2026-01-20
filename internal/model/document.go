@@ -10,7 +10,6 @@ type Document struct {
 const (
 	bodyType = 'b'
 	headerType = 'h'
-	queryType = 'q'
 )
 
 type Passage struct {
@@ -30,11 +29,10 @@ type Position struct {
 
 func NewTypeTextObj[T Passage | Position](t byte, text string, i int) T {
 	switch t {
-	case bodyType, headerType, queryType:
+	case bodyType, headerType:
 
 	default:
 		panic("unnamed passage type")
-
 	}
 
 	switch any(*new(T)).(type) {
@@ -47,4 +45,10 @@ func NewTypeTextObj[T Passage | Position](t byte, text string, i int) T {
 	default:
 		panic("unnamed passage type")
 	}
+}
+
+type CrawlNode struct {
+	Activation 	func()
+	Depth 		int
+	SameDomain 	bool
 }
