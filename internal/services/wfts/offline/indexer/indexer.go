@@ -47,15 +47,13 @@ type indexer struct {
 	stemmer 	*textHandling.EnglishStemmer
 	sc 			*spellChecker.SpellChecker
 	logger 		*logger.Logger
-	vectorizer 	*textHandling.Vectorizer
 	minHash 	*minHash
 	mu 			*sync.RWMutex
 	repository 	repository
 }
 
-func NewIndexer(repo repository, vec *textHandling.Vectorizer, log *logger.Logger, config *configs.ConfigData) *indexer {
+func NewIndexer(repo repository, log *logger.Logger, config *configs.ConfigData) *indexer {
 	return &indexer{
-		vectorizer: vec,
 		stemmer:   	textHandling.NewEnglishStemmer(),
 		mu: 		new(sync.RWMutex),
 		repository: repo,
@@ -87,12 +85,12 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 
 	idx.spider = scraper.NewScraper(vis, &scraper.ConfigData{
 		StartURLs:     	config.BaseURLs,
-		CacheCap: 		config.CacheCap,	
+		CacheCap: 		config.WorkersCount * 10,	
 		Depth:       	config.MaxDepth,
 		OnlySameDomain: config.OnlySameDomain,
 	}, idx.logger,
 		workerPool.NewWorkerPool(config.WorkersCount, config.TasksCount, global, idx.logger),
-		idx, global, idx.vectorizer.PutDocQuery)
+		idx, global)
 	idx.spider.Run()
 	return nil
 }
@@ -101,17 +99,17 @@ func (idx *indexer) GetAVGLen() (float64, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	var wordCount int
+	var tokens int
 	docs, err := idx.repository.GetAllDocuments()
 	if err != nil {
 		return 0, err
 	}
 
 	for _, doc := range docs {
-		wordCount += doc.WordCount
+		tokens += doc.TokenCount
 	}
 
-	return float64(wordCount) / (float64(len(docs)) + 1), nil
+	return float64(tokens) / (float64(len(docs)) + 1), nil
 }
 
 func (idx *indexer) SaveUrlsToBank(key [32]byte, data []byte) error {

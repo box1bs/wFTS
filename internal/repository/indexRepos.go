@@ -103,7 +103,7 @@ func (ir *IndexRepository) IndexDocumentWords(docID [32]byte, sequence map[strin
 				key := fmt.Appendf(nil, WordDocumentKeyFormat, entry.word, docID)
 				positions := pos[entry.word]
 				if len(positions) > 500 {
-					positions = positions[:500] // от переполнения транзакции
+					positions = positions[:500] // более 500 вхождений одного слова в один документ....
 				}
 
 				wcp := model.WordCountAndPositions{
@@ -114,7 +114,7 @@ func (ir *IndexRepository) IndexDocumentWords(docID [32]byte, sequence map[strin
 				if err != nil {
 					return err
 				}
-				if len(val) > 1024 * 1024 { // нужен ли нам текстовый токен более 1 мб? я думаю нет
+				if len(val) > 1024 * 1024 { // нужен ли нам текстовый токен более 1 мб? я думаю нет, я правда не сильно верю что это условие вообще хоть раз отработает
 					continue
 				}
 				if err := txn.Set(key, val); err != nil {

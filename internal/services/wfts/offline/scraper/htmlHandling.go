@@ -13,7 +13,6 @@ import (
 
 	"wfts/internal/model"
 	"wfts/pkg/logger"
-	"wfts/internal/utils/parser"
 	"golang.org/x/net/html"
 )
 
@@ -22,7 +21,7 @@ type linkToken struct {
 	SameDomain 	bool
 }
 
-func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm string, rls *parser.RobotsTxt, gd int) ([]*linkToken, error) {
+func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm string, gd int) ([]*linkToken, error) {
 	ws.rlMu.RLock()
 	rl := ws.rlMap[cur.Host]
 	ws.rlMu.RUnlock()
@@ -44,34 +43,26 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 
 	c, cancel := context.WithTimeout(ctx, deadlineTime)
 	defer cancel()
-    links, passages, rawText := ws.parseHTMLStream(c, doc, cur, rls, gd)
+    links, passages := ws.parseHTMLStream(c, doc, cur, gd)
 	if len(links) != 0 {
 		ws.lru.Put(hashed, links)
-	}
-	
-	var ok bool
-	select {
-	case document.WordVec, ok = <-ws.putDocReq(rawText, ws.globalCtx):
-		if !ok {
-			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.CRITICAL_ERROR, "error vectorizing document for page: %s", cur))
-			return nil, fmt.Errorf("error vectoriing document for page: %s", cur)
-		}
-	case <-ws.globalCtx.Done():
-		ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.CRITICAL_ERROR, "timeout vectorizing document for page: %s", cur))
-		return nil, fmt.Errorf("context canceled")
 	}
 
 	return links, ws.idx.HandleDocumentWords(document, passages)
 }
 
-func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, rules *parser.RobotsTxt, currentDeep int) (links []*linkToken, pasages []model.Passage, fullText string) {
+func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, currentDeep int) (links []*linkToken, pasages []model.Passage) {
 	tokenizer := html.NewTokenizer(strings.NewReader(htmlContent))
 	var tagStack [][2]byte
 	var garbageTagStack []string
 	var rawTextBuilder strings.Builder 
 	links = make([]*linkToken, 0)
 	visit := make([]*linkToken, 0)
-	
+
+	ws.rlMu.RLock()
+	rules := ws.rulesMap[truncatePort(baseURL)]
+	ws.rlMu.RUnlock()
+
 	tokenCount := 0
 	const checkContextEvery = 10
 
@@ -83,7 +74,6 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 				if len(visit) != 0 {
 					links = append(links, visit...)
 				}
-				fullText = rawTextBuilder.String()
 				return
 			default:
 			}
@@ -184,7 +174,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 				text := strings.TrimSpace(string(tokenizer.Text()))
 				if text != "" {
 					rawTextBuilder.WriteString(text)
-					pasages = append(pasages, model.NewTypeTextObj[model.Passage]('h', text, 0))
+					pasages = append(pasages, model.NewTypeTextObj[model.Passage](model.HeaderType, text, 0))
 				}
 				continue
 			}
@@ -192,7 +182,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 			text := strings.TrimSpace(string(tokenizer.Text()))
 			if text != "" {
 				rawTextBuilder.WriteString(text)
-				pasages = append(pasages, model.NewTypeTextObj[model.Passage]('b', text, 0))
+				pasages = append(pasages, model.NewTypeTextObj[model.Passage](model.BodyType, text, 0))
 			}
 
 		}
@@ -200,7 +190,6 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 	if len(visit) != 0 {
 		links = append(links, visit...)
 	}
-	fullText = rawTextBuilder.String()
 	return
 }
 

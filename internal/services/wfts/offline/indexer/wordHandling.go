@@ -37,7 +37,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 			i++
 		}
 	}
-	doc.WordCount = i
+	doc.TokenCount = i
 
 	if len(allWordTokens) > 4 {
 		sign := idx.minHash.CreateSignature(allWordTokens)

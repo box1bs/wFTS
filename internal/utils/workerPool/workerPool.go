@@ -29,7 +29,7 @@ func NewWorkerPool(size int, queueCapacity int, c context.Context, l *logger.Log
 		quit:      	make(chan struct{}),
 		crawlHeap:  qheap,
 		wg:        	new(sync.WaitGroup),
-		ctx: 		c,	
+		ctx: 		c,
 	}
 	for range size {
 		go wp.worker()

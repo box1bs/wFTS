@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"log"
 
-	"wfts/internal/services/wfts/offline/scraper/lruCache"
 	"wfts/internal/model"
-	"wfts/pkg/logger"
+	"wfts/internal/services/wfts/offline/scraper/lruCache"
 	"wfts/internal/utils/parser"
+	"wfts/pkg/logger"
 
 	"context"
 	"net/http"
@@ -32,7 +33,6 @@ type workerPool interface {
 type WebScraper struct {
 	client         	*http.Client
 	visited        	*sync.Map
-	mu 				*sync.Mutex
 	cfg 		  	*ConfigData
 	log 			*logger.Logger
 	rlMu         	*sync.RWMutex
@@ -41,7 +41,7 @@ type WebScraper struct {
 	idx 			indexer
 	globalCtx		context.Context
 	rlMap			map[string]*rateLimiter
-	putDocReq		func(string, context.Context) <-chan [][]float64
+	rulesMap		map[string]*parser.RobotsTxt
 }
 
 type ConfigData struct {
@@ -58,7 +58,7 @@ const (
 	numOfTries = 3 // если кто то решил поменять это на 0, чтож, удачи
 )
 
-func NewScraper(mp *sync.Map, cfg *ConfigData, l *logger.Logger, wp workerPool, idx indexer, c context.Context, putDocReq func(string, context.Context) <-chan [][]float64) *WebScraper {
+func NewScraper(mp *sync.Map, cfg *ConfigData, l *logger.Logger, wp workerPool, idx indexer, c context.Context) *WebScraper {
 	return &WebScraper{
 		client: &http.Client{
 			Timeout: deadlineTime,
@@ -69,7 +69,6 @@ func NewScraper(mp *sync.Map, cfg *ConfigData, l *logger.Logger, wp workerPool, 
 			},
 		},
 		visited:        mp,
-		mu: 			new(sync.Mutex),
 		cfg: 			cfg,
 		log:			l,
 		rlMu:           new(sync.RWMutex),
@@ -78,7 +77,7 @@ func NewScraper(mp *sync.Map, cfg *ConfigData, l *logger.Logger, wp workerPool, 
 		idx: 			idx,
 		globalCtx:		c,
 		rlMap: 			make(map[string]*rateLimiter),
-		putDocReq:		putDocReq,
+		rulesMap: 		make(map[string]*parser.RobotsTxt),
 	}
 }
 
@@ -97,7 +96,7 @@ func (ws *WebScraper) Run() {
 			rl := NewRateLimiter(DefaultDelay)
 			ws.rlMap[parsed.Host] = rl
 			ws.rlMu.Unlock()
-			ws.ScrapeWithContext(ctx, parsed, nil, 0)
+			ws.ScrapeWithContext(ctx, parsed, 0)
 		}})
 	}
 	ws.pool.Wait()
@@ -105,7 +104,7 @@ func (ws *WebScraper) Run() {
 	ws.pool.Stop()
 }
 
-func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL, rules *parser.RobotsTxt, depth int) {
+func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL, depth int) {
     if ws.checkContext(ctx, currentURL.String()) {return}
 
     if depth >= ws.cfg.Depth {
@@ -121,9 +120,12 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 	if err.Error() == BaseXMLPageError || ws.checkContext(ctx, currentURL.String()) {
 		return
 	}
-	if rls != nil {
-		rules = rls
+	host := truncatePort(currentURL)
+	ws.rlMu.Lock()
+	if rls != nil && ws.rulesMap[host] == nil {
+		ws.rulesMap[host] = rls
 	}
+	ws.rlMu.Unlock()
 	hashed := sha256.Sum256([]byte(normalized))
 	load := false
     
@@ -133,6 +135,7 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 		} else if loaded {
 			load = true
 			if v := ws.lru.Get(hashed); v != nil {
+				log.Println("I was called!")
 				links = v.([]*linkToken)
 			} else {
 				encoded, err := ws.idx.GetUrlsByHash(hashed)
@@ -151,7 +154,7 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 				}
 			}
 		} else {
-			links, err = ws.fetchHTMLcontent(currentURL, ctx, normalized, rules, depth)
+			links, err = ws.fetchHTMLcontent(currentURL, ctx, normalized, depth)
 			if err != nil {
 				return
 			}
@@ -180,11 +183,8 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 		if ws.cfg.OnlySameDomain && !link.SameDomain {
 			continue
 		}
-		
-		rls := rules
-        if !link.SameDomain {
-			rls = nil
-        }
+
+		if ws.checkContext(ws.globalCtx, currentURL.String()) { return }
 
         ws.pool.Submit(model.CrawlNode{Activation: func() {
 			ws.rlMu.Lock()
@@ -194,7 +194,7 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 			c, cancel := context.WithTimeout(ws.globalCtx, crawlTime)
 			defer cancel()
 			ws.rlMu.Unlock()
-			ws.ScrapeWithContext(c, link.Link, rls, depth+1)
+			ws.ScrapeWithContext(c, link.Link, depth+1)
 		},
 			Depth: depth,
 			SameDomain: link.SameDomain,

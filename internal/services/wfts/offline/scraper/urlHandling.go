@@ -54,6 +54,10 @@ func normalizeUrl(rawUrl string) (string, error) {
 	return sb.String(), nil
 }
 
+func truncatePort(uri *url.URL) string {
+	return strings.Split(uri.Hostname(), ":")[0]
+}
+
 func isSameOrigin(rawURL *url.URL, baseURL *url.URL) bool {
-	return strings.Contains(strings.Split(baseURL.Hostname(), ":")[0], strings.Split(rawURL.Hostname(), ":")[0])
+	return strings.Contains(truncatePort(baseURL), truncatePort(rawURL))
 }

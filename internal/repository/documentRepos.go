@@ -15,25 +15,23 @@ const (
 	WordDocumentKeyFormat = "ri:%s_%x"
 )
 
-type docStForJson struct {
+type docDBSt struct {
 	Id        []byte      `json:"id"`
 	URL       string      `json:"url"`
-	WordCount int         `json:"words_count"`
-	Vec       [][]float64 `json:"word_vec"`
+	TokenCount int        `json:"words_count"`
 }
 
 func (ir *IndexRepository) documentToBytes(doc *model.Document) ([]byte, error) {
-	p := docStForJson{
+	p := docDBSt{
 		Id:        doc.Id[:],
 		URL:       doc.URL,
-		WordCount: doc.WordCount,
-		Vec:       doc.WordVec,
+		TokenCount:doc.TokenCount,
 	}
 	return json.Marshal(p)
 }
 
 func (ir *IndexRepository) bytesToDocument(body []byte) (*model.Document, error) {
-	p := docStForJson{}
+	p := docDBSt{}
 	
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
@@ -49,8 +47,7 @@ func (ir *IndexRepository) bytesToDocument(body []byte) (*model.Document, error)
 	return &model.Document{
 		Id:        idArr,
 		URL:       p.URL,
-		WordCount: p.WordCount,
-		WordVec:   p.Vec,
+		TokenCount:p.TokenCount,
 	}, nil
 }
 

@@ -40,7 +40,6 @@
     "model_sever_link" : "http://127.0.0.1:50920",
     "tui_border_color" : "#fffff0",
     "log_channel_size" : 10000,
-    "cache_cap": 100,
     "ticker_time_milliseconds" : 1000,
     "worker_count" : 40,
     "task_count" : 1000,

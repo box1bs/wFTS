@@ -12,7 +12,6 @@ import (
 
 	"wfts/configs"
 	"wfts/internal/services/wfts/offline/indexer"
-	"wfts/internal/services/wfts/offline/indexer/textHandling"
 	"wfts/internal/services/wfts/online/searcher"
 	"wfts/internal/model"
 	"wfts/internal/repository"
@@ -77,16 +76,7 @@ func main() {
 		//os.Exit(1)
 	}()
 
-	vec := textHandling.NewVectorizer(cfg.WorkersCount, cfg.TickerTimeMilliseconds, cfg.PythonSrvPath)
-	if err := vec.WaitForPythonServer(ctx); err != nil && err.Error() != textHandling.BaseCanceledError {
-		panic(err)
-	} else if err != nil {
-		log.Write(logger.NewMessage(logger.MAIN_LAYER, logger.ERROR, textHandling.BaseCanceledError))
-		return
-	}
-
-	defer vec.Close()
-	i := indexer.NewIndexer(ir, vec, log, cfg)
+	i := indexer.NewIndexer(ir, log, cfg)
 	if !*indexFlag {
 		if err := i.Index(cfg, ctx); err != nil {
 			panic(err)
@@ -100,7 +90,7 @@ func main() {
 
 	fmt.Printf("Index built with %d documents. Enter search queries (q to exit):\n", count)
 
-	s := searcher.NewSearcher(log, i, ir, vec)
+	s := searcher.NewSearcher(log, i, ir)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -151,15 +141,7 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 		//os.Exit(1)
 	}()
 
-	vec := textHandling.NewVectorizer(cfg.WorkersCount, cfg.TickerTimeMilliseconds, cfg.PythonSrvPath)
-	if err := vec.WaitForPythonServer(ctx); err != nil && err.Error() != textHandling.BaseCanceledError {
-		panic(err)
-	} else if err != nil {
-		log.Write(logger.NewMessage(logger.MAIN_LAYER, logger.ERROR, textHandling.BaseCanceledError))
-		return
-	}
-	defer vec.Close()
-	i := indexer.NewIndexer(ir, vec, log, cfg)
+	i := indexer.NewIndexer(ir, log, cfg)
 	if !indexF {
 		go func() {
 			if err := i.Index(cfg, ctx); err != nil {
@@ -168,7 +150,7 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 		}()
 	}
 
-	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(log, i, ir, vec).Search, c)
+	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(log, i, ir).Search, c)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		panic(err)
 	}

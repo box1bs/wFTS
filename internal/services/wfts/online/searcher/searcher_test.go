@@ -11,13 +11,13 @@ import (
 func TestGetMinQueryDistInDoc(t *testing.T) {
     tests := []struct {
         name        string
-        positions   []*[]model.Position
+        positions   [][]model.Position
         lenQuery    int
         expected    int
     }{
         {
             name:     "happy path minimal distance",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {{I: 10}, {I: 20}, {I: 30}},
                 {{I: 15}, {I: 25}},
                 {{I: 35}},
@@ -27,7 +27,7 @@ func TestGetMinQueryDistInDoc(t *testing.T) {
         },
         {
             name:     "empty positions list",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {},
             },
             lenQuery: 1,
@@ -35,7 +35,7 @@ func TestGetMinQueryDistInDoc(t *testing.T) {
         },
         {
             name:     "empty second term positions",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {{I: 10}},
                 {},
             },
@@ -44,7 +44,7 @@ func TestGetMinQueryDistInDoc(t *testing.T) {
         },
         {
             name:     "no valid sequence",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {{I: 10}},
                 {{I: 5}},
             },
@@ -53,7 +53,7 @@ func TestGetMinQueryDistInDoc(t *testing.T) {
         },
         {
             name:     "multiple valid sequences",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {{I: 5}, {I: 15}},
                 {{I: 10}, {I: 20}},
                 {{I: 25}, {I: 35}},
@@ -63,7 +63,7 @@ func TestGetMinQueryDistInDoc(t *testing.T) {
         },
         {
             name:     "binary search boundary",
-            positions: []*[]model.Position{
+            positions: [][]model.Position{
                 {{I: 100}},
                 {{I: 50}, {I: 150}, {I: 200}},
             },

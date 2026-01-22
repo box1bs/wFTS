@@ -1,13 +1,10 @@
 package searcher
 
 import (
-	"context"
 	"math"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"wfts/internal/model"
 	"wfts/pkg/logger"
@@ -23,42 +20,28 @@ type resitory interface {
 	GetDocumentByID([32]byte) (*model.Document, error)
 }
 
-type vectorizer interface {
-	PutDocQuery(string, context.Context) <-chan [][]float64
-	CallRankModel([]byte) (*http.Response, error)
-}
-
 type Searcher struct {
 	log 		*logger.Logger
 	mu         	*sync.RWMutex
-	vectorizer  vectorizer
 	idx 		index
 	repo 	 	resitory
 }
 
-func NewSearcher(l *logger.Logger, idx index, repo resitory, vec vectorizer) *Searcher {
+func NewSearcher(l *logger.Logger, idx index, repo resitory) *Searcher {
 	return &Searcher{
 		log: 		l,
 		mu:        	&sync.RWMutex{},
-		vectorizer: vec,
 		idx:       	idx,
 		repo: 	 	repo,
 	}
 }
 
 type requestRanking struct {
-	tf_idf 				float64		`json:"-"`
-	bm25 				float64		`json:"-"`
-	WordsCos			float64		`json:"cos"`
-	Dpq					float64		`json:"euclid_dist"`
-	QueryCoverage		float64		`json:"query_coverage"`
-	QueryDencity 		float64		`json:"query_dencity"`
-	LogLenWordInURL 	float64		`json:"log_len_words_in_url"`
-	LenURL 				int 		`json:"len_url"`
-	TermProximity 		int			`json:"term_proximity"`
-	SumTokenInPackage 	int			`json:"sum_token_in_package"`
-	HasWordInHeader 	bool		`json:"words_in_header"`
-	WordInUrl			bool 		`json:"word_in_url"`
+	tf_idf 				float64
+	bm25 				float64
+	logLenWordInURL 	float64
+	termProximity 		int
+	hasWordInHeader 	bool
 	//any ranking scores
 }
 
@@ -118,30 +101,18 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				
 				rankMu.Lock()
 				r := rank[docID]
-				r.SumTokenInPackage += item.Count
-				tf := float64(tokenFreq[i]) / float64(doc.WordCount)
+				tf := float64(tokenFreq[i]) / float64(doc.TokenCount)
 				r.tf_idf += tf * idf
 				r.bm25 += calcBM25(idf, tf, doc, avgLen)
-				if r.TermProximity == 0 {
-					positions := []*[]model.Position{}
-					coverage := 0.0
-					docLen := 0.0
+				if r.termProximity == 0 {
+					positions := [][]model.Position{}
 					for i := range words {
-						positions = append(positions, &item.Positions)
-						if l := len(index[i][docID].Positions); l > 0 {
-							coverage++
-							docLen += float64(l)
-						}
+						positions = append(positions, index[i][docID].Positions)
 					}
-					r.TermProximity = getMinQueryDistInDoc(positions, queryLen)
-					r.QueryDencity = coverage / docLen
-					r.QueryCoverage = coverage / float64(queryLen)
-
-					r.WordInUrl, r.LogLenWordInURL = boyerMoorAlgorithm(strings.ToLower(doc.URL), words)
-					r.LenURL = len(doc.URL)
-					
-					for i := 0; i < item.Count && !r.HasWordInHeader; i++ {
-						r.HasWordInHeader = item.Positions[i].Type == 'h'
+					r.termProximity = getMinQueryDistInDoc(positions, queryLen)
+					_, r.logLenWordInURL = boyerMoorAlgorithm(strings.ToLower(doc.URL), words)
+					for i := 0; i < item.Count && !r.hasWordInHeader; i++ {
+						r.hasWordInHeader = item.Positions[i].Type == model.HeaderType
 					}
 				}
 				rank[docID] = r
@@ -164,102 +135,35 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		close(done)
 	}()
 	
-	vec := []float64{}
-	c, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-	defer cancel()
-	select {
-	case v, ok := <-s.vectorizer.PutDocQuery(query, c):
-		if !ok {
-			s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.CRITICAL_ERROR, "error vectorozing query"))
-			return nil
-		}
-		vec = v[0]
-
-	case <-c.Done():
-		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.CRITICAL_ERROR, "vectorizing timeout"))
-		return nil
-	}
-	
-	
 	s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "result len: %d", len(result)))
 	
 	<-done
-	
-	filteredResult := make([]*model.Document, 0)
-	for _, doc := range result {
-		r := rank[doc.Id]
-		sumCosW := 0.0
-		for _, v := range doc.WordVec {
-			sumCosW += calcCosineSimilarity(v, vec)
-		}
-		length := float64(len(doc.WordVec))
-		r.WordsCos = sumCosW / length
-		sumDistance := 0.0
-		for _, v := range doc.WordVec {
-			sumDistance += calcEuclidianDistance(v, vec)
-		}
-		r.Dpq = sumDistance / length
-		rank[doc.Id] = r
-		filteredResult = append(filteredResult, doc)
-	}
 
-	length = len(filteredResult)
+	length = len(result)
 	if length == 0 {
 		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "empty result"))
 		return nil
 	}
 
-	sort.Slice(filteredResult, func(i, j int) bool {
-		if TruncateToTwoDecimalPlaces(rank[filteredResult[i].Id].WordsCos) != TruncateToTwoDecimalPlaces(rank[filteredResult[j].Id].WordsCos) {
-			return rank[filteredResult[i].Id].WordsCos > rank[filteredResult[j].Id].WordsCos
+	sort.Slice(result, func(i, j int) bool {
+		if rank[result[i].Id].bm25 != rank[result[j].Id].bm25 {
+			return rank[result[i].Id].bm25 > rank[result[j].Id].bm25
 		}
-		if TruncateToTwoDecimalPlaces(rank[filteredResult[i].Id].Dpq) != TruncateToTwoDecimalPlaces(rank[filteredResult[j].Id].Dpq) {
-			return rank[filteredResult[i].Id].Dpq < rank[filteredResult[j].Id].Dpq
+		if rank[result[i].Id].tf_idf != rank[result[j].Id].tf_idf {
+			return rank[result[i].Id].tf_idf > rank[result[j].Id].tf_idf
 		}
-		if rank[filteredResult[i].Id].bm25 != rank[filteredResult[j].Id].bm25 {
-			return rank[filteredResult[i].Id].bm25 > rank[filteredResult[j].Id].bm25
-		}
-		if rank[filteredResult[i].Id].TermProximity != rank[filteredResult[j].Id].TermProximity {
-			return rank[filteredResult[i].Id].TermProximity > rank[filteredResult[j].Id].TermProximity
-		}
-		return rank[filteredResult[i].Id].tf_idf > rank[filteredResult[j].Id].tf_idf
+		return rank[result[i].Id].termProximity > rank[result[j].Id].termProximity
 	})
 
-	fl := filteredResult[:min(length, maxLen)]
-
-	const width = 10
-	n := len(fl)
-	iterVal := min(width, n)
-	for i := range iterVal {
-		condidates := map[[32]byte]requestRanking{}
-		list := [][32]byte{}
-
-		for j := 0; ; j++ {
-			idx := j * width + i
-			if idx >= n {
-				break
-			}
-
-			condidateId := fl[idx].Id
-			condidates[condidateId] = rank[condidateId]
-			list = append(list, condidateId)
+	topN := result[:min(length, maxLen)]
+	sort.Slice(topN, func(i, j int) bool {
+		if rank[topN[i].Id].logLenWordInURL != rank[topN[j].Id].logLenWordInURL {
+			return rank[topN[i].Id].logLenWordInURL > rank[topN[i].Id].logLenWordInURL
 		}
+		return rank[topN[i].Id].hasWordInHeader && !rank[topN[j].Id].hasWordInHeader
+	})
 
-		if len(list) <= 1 {
-			continue
-		}
-
-		bestPos, err := s.callRankAPI(list, condidates)
-		if err != nil {
-			s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.CRITICAL_ERROR, "python server error: %v", err))
-        	return fl
-		}
-
-		bestElIdx := bestPos * width + i
-		fl[i], fl[bestElIdx] = fl[bestElIdx], fl[i]
-	}
-
-	return fl
+	return topN
 }
 
 func TruncateToTwoDecimalPlaces(f float64) float64 {

@@ -3,13 +3,12 @@ package model
 type Document struct {
 	Id 				[32]byte	`json:"id"`
 	URL				string		`json:"url"`
-	WordCount 		int			`json:"words_count"`
-	WordVec 		[][]float64	`json:"word_vec"`
+	TokenCount 		int			`json:"words_count"`
 }
 
 const (
-	bodyType = 'b'
-	headerType = 'h'
+	BodyType = 'b'
+	HeaderType = 'h'
 )
 
 type Passage struct {
@@ -29,7 +28,7 @@ type Position struct {
 
 func NewTypeTextObj[T Passage | Position](t byte, text string, i int) T {
 	switch t {
-	case bodyType, headerType:
+	case BodyType, HeaderType:
 
 	default:
 		panic("unnamed passage type")
