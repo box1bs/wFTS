@@ -14,6 +14,7 @@ type WorkerPool struct {
 	quit      	chan struct{}
 	crawlHeap 	CrawlStream
 	wg        	*sync.WaitGroup
+	mu 			*sync.Mutex
 	ctx 		context.Context
 	workers   	int32
 }
@@ -26,6 +27,7 @@ func NewWorkerPool(size int, queueCapacity int, c context.Context) *WorkerPool {
 		quit:      	make(chan struct{}),
 		crawlHeap:  qheap,
 		wg:        	new(sync.WaitGroup),
+		mu:			new(sync.Mutex),
 		ctx: 		c,
 	}
 	for range size {
@@ -44,10 +46,13 @@ func (wp *WorkerPool) Submit(task model.CrawlNode) {
 		orig()
 	}
 
+	wp.mu.Lock()
 	select{
 	case wp.buf <- struct{}{}:
 		wp.crawlHeap.Push(task)
+		wp.mu.Unlock()
 	default:
+		wp.mu.Unlock()
 		task.Activation()
 	}
 }
@@ -61,9 +66,13 @@ func (wp *WorkerPool) worker() {
 			if !ok {
 				return
 			}
+			wp.mu.Lock()
 			if f := wp.crawlHeap.Pop().(model.CrawlNode); f.Activation != nil {
+				wp.mu.Unlock()
 				f.Activation()
+				continue
 			}
+			wp.mu.Unlock()
 		case <-wp.quit:
 			return
 		}

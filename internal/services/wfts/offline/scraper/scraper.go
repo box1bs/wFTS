@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"log"
 	"log/slog"
 
 	"wfts/internal/model"
@@ -135,7 +134,6 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 		} else if loaded {
 			load = true
 			if v := ws.lru.Get(hashed); v != nil {
-				log.Println("I was called!")
 				links = v.([]*linkToken)
 			} else {
 				encoded, err := ws.idx.GetUrlsByHash(hashed)
