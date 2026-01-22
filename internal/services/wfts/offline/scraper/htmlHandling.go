@@ -2,17 +2,22 @@ package scraper
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"wfts/internal/model"
+
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/encoding"
 )
 
 type linkToken struct {
@@ -192,6 +197,9 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 	return
 }
 
+const wantedCharset = "utf-8"
+var metaCharsetRe = regexp.MustCompile(`(?i)<meta\s+[^>]*charset\s*['"]([^'"]+)['"]`)
+
 func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, error) {
 	if try <= 0 {
 		return "", fmt.Errorf("http status code: 419, and max amount of tries was reached")
@@ -215,7 +223,7 @@ func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, err
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if resp.StatusCode == http.StatusTooManyRequests && !ws.checkContext(ws.globalCtx, URL) {
 			<-time.After(deadlineTime)
-			return ws.getHTML(URL, rl, try-1)
+			return ws.getHTML(URL, rl, try - 1)
 		} else {
 			return "", fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 		}
@@ -233,7 +241,7 @@ func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, err
 	var builder strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
-
+	
 	for scanner.Scan() {
 		select {
 		case <-ws.globalCtx.Done():
@@ -242,5 +250,24 @@ func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, err
 			builder.WriteString(scanner.Text())
 		}
 	}
-	return builder.String(), scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	htmlText := builder.String()
+	if cset := strings.ToLower(resp.Header.Get("charset")); cset == "" || cset != wantedCharset {
+		if match := metaCharsetRe.FindStringSubmatch(htmlText); len(match) > 1 {
+			cset = strings.ToLower(strings.TrimSpace(string(match[1])))
+		}
+		enc, _ := charset.Lookup(cset)
+		if enc == nil {
+			enc = encoding.Nop
+		}
+		utf8Bytes, err := io.ReadAll(enc.NewDecoder().Reader(bytes.NewReader([]byte(htmlText))))
+		if err != nil {
+			return "", err
+		}
+		htmlText = string(utf8Bytes)
+	}
+	return htmlText, nil
 }
