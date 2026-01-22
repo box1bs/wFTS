@@ -3,14 +3,15 @@ package indexer
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"sync"
 
 	"wfts/configs"
+	"wfts/internal/model"
 	"wfts/internal/services/wfts/offline/indexer/spellChecker"
 	"wfts/internal/services/wfts/offline/indexer/textHandling"
 	"wfts/internal/services/wfts/offline/scraper"
-	"wfts/internal/model"
-	"wfts/pkg/logger"
 	"wfts/internal/utils/workerPool"
 )
 
@@ -46,13 +47,14 @@ type indexer struct {
 	spider 		*scraper.WebScraper
 	stemmer 	*textHandling.EnglishStemmer
 	sc 			*spellChecker.SpellChecker
-	logger 		*logger.Logger
+	logger 		*slog.Logger
 	minHash 	*minHash
 	mu 			*sync.RWMutex
 	repository 	repository
 }
 
-func NewIndexer(repo repository, log *logger.Logger, config *configs.ConfigData) *indexer {
+func NewIndexer(repo repository, wr io.Writer, config *configs.ConfigData) *indexer {
+	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
 	return &indexer{
 		stemmer:   	textHandling.NewEnglishStemmer(),
 		mu: 		new(sync.RWMutex),
@@ -89,7 +91,7 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 		Depth:       	config.MaxDepth,
 		OnlySameDomain: config.OnlySameDomain,
 	}, idx.logger,
-		workerPool.NewWorkerPool(config.WorkersCount, config.TasksCount, global, idx.logger),
+		workerPool.NewWorkerPool(config.WorkersCount, config.TasksCount, global),
 		idx, global)
 	idx.spider.Run()
 	return nil

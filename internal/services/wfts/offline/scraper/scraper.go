@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"log"
+	"log/slog"
 
 	"wfts/internal/model"
 	"wfts/internal/services/wfts/offline/scraper/lruCache"
 	"wfts/internal/utils/parser"
-	"wfts/pkg/logger"
 
 	"context"
 	"net/http"
@@ -34,7 +34,7 @@ type WebScraper struct {
 	client         	*http.Client
 	visited        	*sync.Map
 	cfg 		  	*ConfigData
-	log 			*logger.Logger
+	log 			*slog.Logger
 	rlMu         	*sync.RWMutex
 	lru 			*lrucache.LRUCache
 	pool           	workerPool
@@ -58,7 +58,7 @@ const (
 	numOfTries = 3 // если кто то решил поменять это на 0, чтож, удачи
 )
 
-func NewScraper(mp *sync.Map, cfg *ConfigData, l *logger.Logger, wp workerPool, idx indexer, c context.Context) *WebScraper {
+func NewScraper(mp *sync.Map, cfg *ConfigData, l *slog.Logger, wp workerPool, idx indexer, c context.Context) *WebScraper {
 	return &WebScraper{
 		client: &http.Client{
 			Timeout: deadlineTime,
@@ -86,7 +86,7 @@ func (ws *WebScraper) Run() {
 	for _, uri := range ws.cfg.StartURLs {
 		parsed, err := url.Parse(uri)
 		if err != nil {
-			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error parsing link: %v", err))
+			ws.log.Error("parsing url failed: " + err.Error())
 			continue
 		}
 		ws.pool.Submit(model.CrawlNode{Activation: func() {
@@ -100,7 +100,7 @@ func (ws *WebScraper) Run() {
 		}})
 	}
 	ws.pool.Wait()
-	ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.DEBUG, "waiting for stoppnig worker pool"))
+	ws.log.Debug("waiting for stoppnig worker pool")
 	ws.pool.Stop()
 }
 
@@ -141,12 +141,12 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 				encoded, err := ws.idx.GetUrlsByHash(hashed)
 				if err != nil {
 					if err.Error() != "Key not found" {
-						ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.CRITICAL_ERROR, "error getting urls, from db: %v", err))
+						ws.log.Error("error getting urls, from db: " + err.Error())
 					}
 					return
 				}
 				if err := gob.NewDecoder(bytes.NewBuffer(encoded)).Decode(&links); err != nil {
-					ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error unmarshalling urls from db: %v", err))
+					ws.log.Error("error unmarshalling urls from db: " + err.Error())
 					return
 				}
 				if len(links) != 0 {
@@ -161,19 +161,19 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 		}
 		
 		if len(links) == 0 {
-			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.DEBUG, "empty links in page %s\n", currentURL))
+			ws.log.Debug("empty links in page " + currentURL.String())
 			return
 		}
 
 		if !load {
 			var buf bytes.Buffer
 			if err := gob.NewEncoder(&buf).Encode(links); err != nil {
-				ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.CRITICAL_ERROR, "error marshalling urls: %v", err))
+				ws.log.Error("error marshalling urls: " + err.Error())
 				return
 			}
 
 			if err := ws.idx.SaveUrlsToBank(hashed, buf.Bytes()); err != nil {
-				ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error saving urls: %v", err))
+				ws.log.Error("error saving urls: " + err.Error())
 				return
 			}
 		}
@@ -218,7 +218,7 @@ func (ws *WebScraper) checkContext(ctx context.Context, currentURL string) bool 
 				return true
 			default:
 			}
-			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "context canceled while parsing page: %s\n", currentURL))
+			ws.log.Debug("context canceled while parsing page: " + currentURL)
 			return true
 		default:
 	}

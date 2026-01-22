@@ -4,20 +4,21 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
-
 	"fmt"
 
 	"wfts/internal/model"
-	"wfts/pkg/logger"
+
 	"github.com/dgraph-io/badger/v3"
 )
 
 type IndexRepository struct {
 	DB 				*badger.DB
-	log 			*logger.Logger
+	log 			*slog.Logger
 	wg 				*sync.WaitGroup
 	mu 				*sync.Mutex
 	nGramIndexer	*wordChunkData
@@ -25,15 +26,16 @@ type IndexRepository struct {
 	chunkSize 		int
 }
 
-func NewIndexRepository(path string, logger *logger.Logger, chunkSize int) (*IndexRepository, error) {
+func NewIndexRepository(path string, wr io.Writer, chunkSize int) (*IndexRepository, error) {
 	db, err := badger.Open(badger.DefaultOptions(path).WithLoggingLevel(badger.WARNING))
 	db.CacheMaxCost(badger.BlockCache, 64 << 20)
 	if err != nil {
 		return nil, err
 	}
+	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
 	ir := &IndexRepository{
 		DB: db,
-		log: logger,
+		log: log,
 		wg: new(sync.WaitGroup),
 		mu: new(sync.Mutex),
 		nGramIndexer: &wordChunkData{buffer: make(map[string][]string), counts: make(map[string]int)},

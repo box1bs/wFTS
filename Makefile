@@ -5,7 +5,7 @@ build: test
 	go build -o ./.bin/${BINARY_NAME} ./cmd/app/main.go
 
 test:
-	@go test ./... -v -count=1 -parallel=1 2>&1 | grep -v "no test files" || true
+	go test ./... -v -count=1 -parallel=1 | grep -v "no test files" || true
 
 index: build
 	./.bin/${BINARY_NAME}

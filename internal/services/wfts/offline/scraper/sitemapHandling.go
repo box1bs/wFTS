@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"wfts/pkg/logger"
 	"wfts/internal/utils/parser"
 	"golang.org/x/net/html/charset"
 )
@@ -122,7 +121,7 @@ func (ws *WebScraper) prepareSitemapLinks(current *url.URL) ([]*linkToken, error
 		for _, link := range urls {
 			parsed, err := url.Parse(link)
 			if err != nil {
-				ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error parsing link: %v", err))
+				ws.log.Error("error parsing link: " + err.Error())
 				continue
 			}
 			same := isSameOrigin(parsed, current)

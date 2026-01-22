@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"wfts/pkg/logger"
 	"github.com/dgraph-io/badger/v3"
 )
 
@@ -207,7 +206,7 @@ func (ir *IndexRepository) flushChunk(id int, k, data string, buffer any) error 
 	if err := ir.DB.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, val)
 	}); err != nil {
-		ir.log.Write(logger.NewMessage(logger.REPOSITORY_LAYER, logger.CRITICAL_ERROR, "error flushing chunk %s, with error %v", data, err))
+		ir.log.Error(fmt.Sprintf("error flushing chunk %s, with error %v", data, err))
 		return err
 	}
 	return nil

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"wfts/internal/model"
-	"wfts/pkg/logger"
 	"golang.org/x/net/html"
 )
 
@@ -27,11 +26,11 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 	ws.rlMu.RUnlock()
 	doc, err := ws.getHTML(cur.String(), rl, numOfTries)
     if err != nil {
-		ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error getting html: %s, with error: %v", cur, err))
+		ws.log.Error(fmt.Sprintf("error getting html: %s, with error: %v", cur, err))
         return nil, err
     }
 	if doc == "" {
-		ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.DEBUG, "empty html content on page: %s", cur))
+		ws.log.Debug("empty html content on page: " + cur.String())
         return nil, fmt.Errorf("empty html content on page: %s", cur)
 	}
 	
@@ -84,7 +83,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 			if tokenizer.Err() == io.EOF {
 				break
 			}
-			ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error parsing HTML with url: %s", baseURL.String()))
+			ws.log.Error("error parsing HTML with url: " + baseURL.String())
 			break
 		}
 
@@ -121,12 +120,12 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 						if link != "" {
 							normalized, err := normalizeUrl(link)
 							if err != nil {
-								ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error normalizing url: %s, with error: %v", link, err))
+								ws.log.Error(fmt.Sprintf("error normalizing url: %s, with error: %v", link, err))
 								break
 							}
 							uri, err := url.Parse(link)
 							if err != nil || uri == nil {
-								ws.log.Write(logger.NewMessage(logger.SCRAPER_LAYER, logger.ERROR, "error parsing link: %v", err))
+								ws.log.Error("error parsing link: " + err.Error())
 								break
 							}
 							if rules != nil {

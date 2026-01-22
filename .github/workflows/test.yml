@@ -1,0 +1,16 @@
+name: Build And Test On Commit
+
+on:
+  commit:
+    branches:
+      - main
+      - dev
+
+job:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: go:1.24.3
+    steps:
+      - run: go mod download
+      - run: make build

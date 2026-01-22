@@ -3,13 +3,12 @@ package scraper
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"reflect"
 	"sort"
 	"testing"
-
-	"wfts/pkg/logger"
 )
 
 func TestHtmlGetter(t *testing.T) {
@@ -27,7 +26,7 @@ func TestHtmlGetter(t *testing.T) {
     
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            html, err := NewScraper(nil, &ConfigData{}, logger.NewLogger(nil, os.Stdout, 1), nil, nil, context.Background()).getHTML(tt.url, NewRateLimiter(1), 3)
+            html, err := NewScraper(nil, &ConfigData{}, slog.Default(), nil, nil, context.Background()).getHTML(tt.url, NewRateLimiter(1), 3)
             if err != nil {
                 t.Fatalf("getHTML(%q): %v", tt.url, err)
             }

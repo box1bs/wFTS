@@ -1,13 +1,15 @@
 package searcher
 
 import (
+	"fmt"
+	"io"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
 	"sync"
 
 	"wfts/internal/model"
-	"wfts/pkg/logger"
 )
 
 type index interface {
@@ -21,15 +23,16 @@ type resitory interface {
 }
 
 type Searcher struct {
-	log 		*logger.Logger
+	log 		*slog.Logger
 	mu         	*sync.RWMutex
 	idx 		index
 	repo 	 	resitory
 }
 
-func NewSearcher(l *logger.Logger, idx index, repo resitory) *Searcher {
+func NewSearcher(wr io.Writer, idx index, repo resitory) *Searcher {
+	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
 	return &Searcher{
-		log: 		l,
+		log: 		log,
 		mu:        	&sync.RWMutex{},
 		idx:       	idx,
 		repo: 	 	repo,
@@ -51,7 +54,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	
 	words, index, err := s.idx.HandleTextQuery(query)
 	if err != nil {
-		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.CRITICAL_ERROR, "handling words error: %v", err))
+		s.log.Error("handling words error: " + err.Error())
 		return nil
 	}
 	
@@ -59,13 +62,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	
 	avgLen, err := s.idx.GetAVGLen()
 	if err != nil {
-		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.ERROR, "%v", err))
+		s.log.Error(err.Error())
 		return nil
 	}
 	
 	length, err := s.repo.GetDocumentsCount()
 	if err != nil {
-		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.ERROR, "%v", err))
+		s.log.Error(err.Error())
 		return nil
 	}
 	
@@ -84,7 +87,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 			defer wg.Done()
 	
 			idf := math.Log(float64(length) / float64(len(index[i]) + 1)) + 1
-			s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "len documents with word: %s, %d", words[i], len(index[i])))
+			s.log.Info(fmt.Sprintf("len documents with word: %s, %d", words[i], len(index[i])))
 			for _, item := range index[i] {
 				tokenFreq[i] += item.Count
 			}
@@ -94,7 +97,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				doc, err := s.repo.GetDocumentByID(docID)
 				if err != nil || doc == nil {
 					rankMu.RUnlock()
-					s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.ERROR, "error: %v, doc: %v", err, doc))
+					s.log.Error(fmt.Sprintf("error: %v, doc: %v", err, doc))
 					continue
 				}
 				rankMu.RUnlock()
@@ -135,13 +138,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		close(done)
 	}()
 	
-	s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "result len: %d", len(result)))
+	s.log.Info(fmt.Sprintf("result len: %d", len(result)))
 	
 	<-done
 
 	length = len(result)
 	if length == 0 {
-		s.log.Write(logger.NewMessage(logger.SEARCHER_LAYER, logger.INFO, "empty result"))
+		s.log.Info("empty result")
 		return nil
 	}
 

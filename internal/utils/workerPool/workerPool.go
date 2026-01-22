@@ -7,11 +7,9 @@ import (
 	"sync/atomic"
 
 	"wfts/internal/model"
-	"wfts/pkg/logger"
 )
 
 type WorkerPool struct {
-	log 		*logger.Logger
 	buf 		chan struct{}
 	quit      	chan struct{}
 	crawlHeap 	CrawlStream
@@ -20,11 +18,10 @@ type WorkerPool struct {
 	workers   	int32
 }
 
-func NewWorkerPool(size int, queueCapacity int, c context.Context, l *logger.Logger) *WorkerPool {
+func NewWorkerPool(size int, queueCapacity int, c context.Context) *WorkerPool {
 	qheap := make(CrawlStream, 0)
 	heap.Init(&qheap)
 	wp := &WorkerPool{
-		log:       	l,
 		buf: 		make(chan struct{}, queueCapacity),
 		quit:      	make(chan struct{}),
 		crawlHeap:  qheap,

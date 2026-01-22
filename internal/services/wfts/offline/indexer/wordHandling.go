@@ -6,7 +6,6 @@ import (
 
 	"wfts/internal/services/wfts/offline/indexer/textHandling"
 	"wfts/internal/model"
-	"wfts/pkg/logger"
 )
 
 func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Passage) error {
@@ -46,7 +45,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 			return err
 		}
 		if simRate := calcSim(sign, conds); simRate > 0.8 {
-			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "finded %f similar page: %s, with word tokens len: %d", simRate, doc.URL, len(allWordTokens)))
+			idx.logger.Debug(fmt.Sprintf("finded %f similar page: %s, with word tokens len: %d", simRate, doc.URL, len(allWordTokens)))
 			return fmt.Errorf("page already indexed")
 		}
 		if err := idx.repository.IndexDocShingles(sign); err != nil {
@@ -62,15 +61,15 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 		return err
 	}
 	if err := idx.repository.SaveDocument(doc); err != nil {
-		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error saving document: %v", err))
+		idx.logger.Error("error saving document: " + err.Error())
 		return err
 	}
 	if err := idx.repository.IndexNGrams(allWordTokens, idx.sc.NGramCount); err != nil {
-		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error indexing ngrams: %v", err))
+		idx.logger.Error("error indexing ngrams: " + err.Error())
 		return err
 	}
 	if err := idx.repository.IndexDocumentWords(doc.Id, stem, pos); err != nil {
-		idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.CRITICAL_ERROR, "error indexing document words: %v", err))
+		idx.logger.Error("error indexing document words: " + err.Error())
 		return err
 	}
 
@@ -136,7 +135,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 			tmpArr := make([]string, lenWords)
 			copy(tmpArr, words)
 			idx.sc.BestReplacement(&words, wordPos, conds, scores)
-			idx.logger.Write(logger.NewMessage(logger.INDEX_LAYER, logger.DEBUG, "words '%s' replaced with '%s' in query", words, words))
+			idx.logger.Debug(fmt.Sprintf("words '%s' replaced with '%s' in query", words, words))
 			_, stem, err := idx.stemmer.TokenizeAndStem(words[wordPos])
 			if err != nil {
 				return nil, nil, err

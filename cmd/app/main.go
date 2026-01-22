@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"wfts/configs"
-	"wfts/internal/services/wfts/offline/indexer"
-	"wfts/internal/services/wfts/online/searcher"
 	"wfts/internal/model"
 	"wfts/internal/repository"
 	"wfts/internal/services/tui"
-	"wfts/pkg/logger"
+	"wfts/internal/services/wfts/offline/indexer"
+	"wfts/internal/services/wfts/online/searcher"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -38,27 +38,16 @@ func main() {
 		return
 	}
 	
-	in := os.Stdout
-	er := os.Stderr
+	out := os.Stdout
 	if cfg.InfoLogPath != "-" {
-		in, err = os.Create(cfg.InfoLogPath)
+		out, err = os.Create(cfg.InfoLogPath)
 		if err != nil {
 			panic(err)
 		}
 	}
-	if cfg.ErrorLogPath != "-" {
-		er, err = os.Create(cfg.ErrorLogPath)
-		if err != nil {
-			panic(err)
-		}
-	}
-	defer in.Close()
-	defer er.Close()
+	defer out.Close()
 
-	log := logger.NewLogger(in, er, cfg.LogChannelSize)
-	defer log.Close()
-
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, out, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}
@@ -76,7 +65,7 @@ func main() {
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, log, cfg)
+	i := indexer.NewIndexer(ir, out, cfg)
 	if !*indexFlag {
 		if err := i.Index(cfg, ctx); err != nil {
 			panic(err)
@@ -90,7 +79,7 @@ func main() {
 
 	fmt.Printf("Index built with %d documents. Enter search queries (q to exit):\n", count)
 
-	s := searcher.NewSearcher(log, i, ir)
+	s := searcher.NewSearcher(out, i, ir)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -121,10 +110,7 @@ func Present(docs []*model.Document) {
 
 func initGUI(cfg *configs.ConfigData, indexF bool) {
 	lc := tui.NewLogChannel(cfg.LogChannelSize)
-	log := logger.NewLogger(lc, lc, cfg.LogChannelSize)
-	defer log.Close()
-
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, lc, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}
@@ -136,12 +122,11 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 	c := make(chan struct{}, 1)
 	go func() {
 		<-c
-		log.Write(logger.NewMessage(logger.MAIN_LAYER, logger.INFO, "Shutting down...")) // чтоб форматирование bubble tea не ломалось
 		cancel()
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, log, cfg)
+	i := indexer.NewIndexer(ir, lc, cfg)
 	if !indexF {
 		go func() {
 			if err := i.Index(cfg, ctx); err != nil {
@@ -150,7 +135,7 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 		}()
 	}
 
-	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(log, i, ir).Search, c)
+	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(lc, i, ir).Search, c)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		panic(err)
 	}
