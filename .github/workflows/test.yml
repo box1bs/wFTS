@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: go:1.24.3
+      image: golang
     steps:
       - run: go mod download
       - run: make build
