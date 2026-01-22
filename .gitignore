@@ -1,11 +1,3 @@
-internal/app/semantic_embeddings/__pycache__/
-internal/app/semantic_embeddings/.venv/
-
-internal/test
-
 .bin
 .data
 logs
-
-dataset.csv
-.env

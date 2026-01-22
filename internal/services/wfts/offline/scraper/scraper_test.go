@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
@@ -20,7 +21,7 @@ func TestHtmlGetter(t *testing.T) {
         {
             name:     "example.com",
             url:      "https://example.com/",
-            filename: "/home/box1bs/.projects/monocle/internal/assets/utest.html",
+            filename: "../../../../assets/utest.html",
         },
     }
     
@@ -30,7 +31,11 @@ func TestHtmlGetter(t *testing.T) {
             if err != nil {
                 t.Fatalf("getHTML(%q): %v", tt.url, err)
             }
-            htmlReader, err := os.OpenFile(tt.filename, os.O_RDONLY, 0600)
+            path, err := filepath.Abs(tt.filename)
+            if err != nil {
+                t.Fatalf("filepath.Abs(%s): %v", tt.filename, err)
+            }
+            htmlReader, err := os.OpenFile(path, os.O_RDONLY, 0600)
             if err != nil {
                 t.Fatalf("OpenFile(%q): %v", tt.filename, err)
             }
