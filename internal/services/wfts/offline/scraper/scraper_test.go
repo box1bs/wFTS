@@ -3,7 +3,6 @@ package scraper
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,7 +26,7 @@ func TestHtmlGetter(t *testing.T) {
     
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            html, err := NewScraper(nil, &ConfigData{}, slog.Default(), nil, nil, context.Background()).getHTML(tt.url, NewRateLimiter(1), 3)
+            html, err := NewScraper(nil, &ConfigData{}, nil, nil, context.Background()).getHTML(context.Background(), tt.url, NewRateLimiter(1), 3)
             if err != nil {
                 t.Fatalf("getHTML(%q): %v", tt.url, err)
             }
@@ -92,7 +91,7 @@ func TestHaveSitemap(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             parsed, _ := url.Parse(tt.input)
-            links, err := NewScraper(nil, &ConfigData{}, nil, nil, nil, context.Background()).haveSitemap(parsed)
+            links, err := NewScraper(nil, &ConfigData{}, nil, nil, context.Background()).haveSitemap(parsed)
             if err != nil {
                 t.Fatalf("haveSitemap(%q): %v", tt.input, err)
             }

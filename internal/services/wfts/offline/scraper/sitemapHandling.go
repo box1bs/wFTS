@@ -121,7 +121,7 @@ func (ws *WebScraper) prepareSitemapLinks(current *url.URL) ([]*linkToken, error
 		for _, link := range urls {
 			parsed, err := url.Parse(link)
 			if err != nil {
-				ws.log.Error("error parsing link: " + err.Error())
+				ws.log.Errorf(NewCrawlAttrs(current.String()), "error parsing link %s: %v", link, err)
 				continue
 			}
 			same := isSameOrigin(parsed, current)

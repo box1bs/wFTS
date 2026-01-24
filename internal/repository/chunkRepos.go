@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -206,7 +207,7 @@ func (ir *IndexRepository) flushChunk(id int, k, data string, buffer any) error 
 	if err := ir.DB.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, val)
 	}); err != nil {
-		ir.log.Error(fmt.Sprintf("error flushing chunk %s, with error %v", data, err))
+		ir.log.Errorf([]slog.Attr{slog.String("data", data)}, "error flushing chunk %v", err) // костыль
 		return err
 	}
 	return nil

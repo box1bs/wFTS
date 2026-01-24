@@ -4,12 +4,10 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"io"
-	"log/slog"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
-	"fmt"
 
 	"wfts/internal/model"
 
@@ -18,7 +16,7 @@ import (
 
 type IndexRepository struct {
 	DB 				*badger.DB
-	log 			*slog.Logger
+	log 			*model.Logger
 	wg 				*sync.WaitGroup
 	mu 				*sync.Mutex
 	nGramIndexer	*wordChunkData
@@ -26,13 +24,12 @@ type IndexRepository struct {
 	chunkSize 		int
 }
 
-func NewIndexRepository(path string, wr io.Writer, chunkSize int) (*IndexRepository, error) {
+func NewIndexRepository(path string, log *model.Logger, chunkSize int) (*IndexRepository, error) {
 	db, err := badger.Open(badger.DefaultOptions(path).WithLoggingLevel(badger.WARNING))
 	db.CacheMaxCost(badger.BlockCache, 64 << 20)
 	if err != nil {
 		return nil, err
 	}
-	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
 	ir := &IndexRepository{
 		DB: db,
 		log: log,

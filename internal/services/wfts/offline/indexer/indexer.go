@@ -1,18 +1,14 @@
 package indexer
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"sync"
 
 	"wfts/configs"
 	"wfts/internal/model"
 	"wfts/internal/services/wfts/offline/indexer/spellChecker"
 	"wfts/internal/services/wfts/offline/indexer/textHandling"
-	"wfts/internal/services/wfts/offline/scraper"
-	"wfts/internal/utils/workerPool"
 )
 
 type repository interface {
@@ -44,28 +40,29 @@ type repository interface {
 }
 
 type indexer struct {
-	spider 		*scraper.WebScraper
 	stemmer 	*textHandling.EnglishStemmer
 	sc 			*spellChecker.SpellChecker
-	logger 		*slog.Logger
+	log			*model.Logger
 	minHash 	*minHash
 	mu 			*sync.RWMutex
 	repository 	repository
 }
 
-func NewIndexer(repo repository, wr io.Writer, config *configs.ConfigData) *indexer {
-	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
+func NewIndexer(repo repository, log *model.Logger, wr io.Writer, config *configs.ConfigData) *indexer {
 	return &indexer{
 		stemmer:   	textHandling.NewEnglishStemmer(),
 		mu: 		new(sync.RWMutex),
 		repository: repo,
 		sc: 		spellChecker.NewSpellChecker(config.MaxTypo, config.NGramCount),
-		logger:    	log,
+		log: log,
 	}
 }
 
-func (idx *indexer) Index(config *configs.ConfigData, global context.Context) error {
-	vis := &sync.Map{}
+type webScraper interface {
+	Run()
+}
+
+func (idx *indexer) Index(vis *sync.Map, ws webScraper) error {
 	if err := idx.repository.LoadVisitedUrls(vis); err != nil {
 		return err
 	}
@@ -85,15 +82,7 @@ func (idx *indexer) Index(config *configs.ConfigData, global context.Context) er
 	}
 	defer idx.repository.SaveSaltArrays(idx.minHash.a, idx.minHash.b)
 
-	idx.spider = scraper.NewScraper(vis, &scraper.ConfigData{
-		StartURLs:     	config.BaseURLs,
-		CacheCap: 		config.WorkersCount * 10,	
-		Depth:       	config.MaxDepth,
-		OnlySameDomain: config.OnlySameDomain,
-	}, idx.logger,
-		workerPool.NewWorkerPool(config.WorkersCount, config.TasksCount, global),
-		idx, global)
-	idx.spider.Run()
+	ws.Run()
 	return nil
 }
 

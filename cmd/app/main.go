@@ -5,9 +5,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"wfts/configs"
@@ -15,6 +17,7 @@ import (
 	"wfts/internal/repository"
 	"wfts/internal/services/tui"
 	"wfts/internal/services/wfts/offline/indexer"
+	"wfts/internal/services/wfts/offline/scraper"
 	"wfts/internal/services/wfts/online/searcher"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,7 +50,12 @@ func main() {
 	}
 	defer out.Close()
 
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, out, cfg.ChunkSize)
+	log := model.NewLogger(slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
+		AddSource: true,
+		ReplaceAttr: model.Replacer,
+	})))
+
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}
@@ -65,9 +73,17 @@ func main() {
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, out, cfg)
+	i := indexer.NewIndexer(ir, log, out, cfg)
 	if !*indexFlag {
-		if err := i.Index(cfg, ctx); err != nil {
+		mp := new(sync.Map)
+		ws := scraper.NewScraper(mp, &scraper.ConfigData{
+			StartURLs: cfg.BaseURLs,
+			WorkersNum: cfg.WorkersCount,
+			HeapCap: cfg.TasksCount,
+			Depth: cfg.MaxDepth,
+			OnlySameDomain: cfg.OnlySameDomain,
+		}, i, log, ctx)
+		if err := i.Index(mp, ws); err != nil {
 			panic(err)
 		}
 	}
@@ -79,7 +95,7 @@ func main() {
 
 	fmt.Printf("Index built with %d documents. Enter search queries (q to exit):\n", count)
 
-	s := searcher.NewSearcher(out, i, ir)
+	s := searcher.NewSearcher(log, i, ir)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -110,7 +126,11 @@ func Present(docs []*model.Document) {
 
 func initGUI(cfg *configs.ConfigData, indexF bool) {
 	lc := tui.NewLogChannel(cfg.LogChannelSize)
-	ir, err := repository.NewIndexRepository(cfg.IndexPath, lc, cfg.ChunkSize)
+	log := model.NewLogger(slog.New(slog.NewJSONHandler(lc, &slog.HandlerOptions{
+		AddSource: true,
+		ReplaceAttr: model.Replacer,
+	})))
+	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
 	if err != nil {
 		panic(err)
 	}
@@ -126,16 +146,24 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, lc, cfg)
+	i := indexer.NewIndexer(ir, log, lc, cfg)
 	if !indexF {
 		go func() {
-			if err := i.Index(cfg, ctx); err != nil {
+			mp := new(sync.Map)
+			ws := scraper.NewScraper(mp, &scraper.ConfigData{
+				StartURLs: cfg.BaseURLs,
+				WorkersNum: cfg.WorkersCount,
+				HeapCap: cfg.TasksCount,
+				Depth: cfg.MaxDepth,
+				OnlySameDomain: cfg.OnlySameDomain,
+			}, i, log, ctx)
+			if err := i.Index(mp, ws); err != nil {
 				panic(err)
 			}
 		}()
 	}
 
-	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(lc, i, ir).Search, c)
+	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(log, i, ir).Search, c)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		panic(err)
 	}

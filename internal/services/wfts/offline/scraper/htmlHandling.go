@@ -29,13 +29,13 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 	ws.rlMu.RLock()
 	rl := ws.rlMap[cur.Host]
 	ws.rlMu.RUnlock()
-	doc, err := ws.getHTML(cur.String(), rl, numOfTries)
+	doc, err := ws.getHTML(ctx, cur.String(), rl, numOfTries)
     if err != nil {
-		ws.log.Error(fmt.Sprintf("error getting html: %s, with error: %v", cur, err))
+		ws.log.Errorf(NewCrawlAttrs(cur.String()), "error getting html: %v", err)
         return nil, err
     }
 	if doc == "" {
-		ws.log.Debug("empty html content on page: " + cur.String())
+		ws.log.Debugf(NewCrawlAttrs(cur.String()), "empty html content")
         return nil, fmt.Errorf("empty html content on page: %s", cur)
 	}
 	
@@ -88,7 +88,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 			if tokenizer.Err() == io.EOF {
 				break
 			}
-			ws.log.Error("error parsing HTML with url: " + baseURL.String())
+			ws.log.Errorf(NewCrawlAttrs(baseURL.String()), "error parsing HTML")
 			break
 		}
 
@@ -125,12 +125,12 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 						if link != "" {
 							normalized, err := normalizeUrl(link)
 							if err != nil {
-								ws.log.Error(fmt.Sprintf("error normalizing url: %s, with error: %v", link, err))
+								ws.log.Errorf(NewCrawlAttrs(link), "error normalizing url: %v", err)
 								break
 							}
 							uri, err := url.Parse(link)
 							if err != nil || uri == nil {
-								ws.log.Error("error parsing link: " + err.Error())
+								ws.log.Errorf(NewCrawlAttrs(link), "error parsing link: %v", err)
 								break
 							}
 							if rules != nil {
@@ -200,7 +200,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 const wantedCharset = "utf-8"
 var metaCharsetRe = regexp.MustCompile(`(?i)<meta\s+[^>]*charset\s*['"]([^'"]+)['"]`)
 
-func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, error) {
+func (ws *WebScraper) getHTML(ctx context.Context, URL string, rl *rateLimiter, try int) (string, error) {
 	if try <= 0 {
 		return "", fmt.Errorf("http status code: 419, and max amount of tries was reached")
 	}
@@ -221,15 +221,15 @@ func (ws *WebScraper) getHTML(URL string, rl *rateLimiter, try int) (string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == http.StatusTooManyRequests && !ws.checkContext(ws.globalCtx, URL) {
+		if resp.StatusCode == http.StatusTooManyRequests && !ws.checkContext(ctx) {
 			<-time.After(deadlineTime)
-			return ws.getHTML(URL, rl, try - 1)
+			return ws.getHTML(ctx, URL, rl, try - 1)
 		} else {
 			return "", fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 		}
 	}
 
-	if ws.checkContext(ws.globalCtx, URL) {
+	if ws.checkContext(ws.globalCtx) {
 		return "", fmt.Errorf("context canceled")
 	}
 

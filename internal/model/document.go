@@ -1,5 +1,10 @@
 package model
 
+import (
+	"log/slog"
+	"path/filepath"
+)
+
 type Document struct {
 	Id 				[32]byte	`json:"id"`
 	URL				string		`json:"url"`
@@ -50,4 +55,12 @@ type CrawlNode struct {
 	Activation 	func()
 	Depth 		int
 	SameDomain 	bool
+}
+
+func Replacer(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.SourceKey {
+		source := a.Value.Any().(*slog.Source)
+		source.File = filepath.Base(source.File)
+	}
+	return a
 }

@@ -1,9 +1,6 @@
 package searcher
 
 import (
-	"fmt"
-	"io"
-	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -23,14 +20,13 @@ type resitory interface {
 }
 
 type Searcher struct {
-	log 		*slog.Logger
+	log 		*model.Logger
 	mu         	*sync.RWMutex
 	idx 		index
 	repo 	 	resitory
 }
 
-func NewSearcher(wr io.Writer, idx index, repo resitory) *Searcher {
-	log := slog.New(slog.NewTextHandler(wr, &slog.HandlerOptions{}))
+func NewSearcher(log *model.Logger, idx index, repo resitory) *Searcher {
 	return &Searcher{
 		log: 		log,
 		mu:        	&sync.RWMutex{},
@@ -54,7 +50,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	
 	words, index, err := s.idx.HandleTextQuery(query)
 	if err != nil {
-		s.log.Error("handling words error: " + err.Error())
+		s.log.Errorf(NewSearchAttrs(query), "handling words error: %v",  err)
 		return nil
 	}
 	
@@ -62,13 +58,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	
 	avgLen, err := s.idx.GetAVGLen()
 	if err != nil {
-		s.log.Error(err.Error())
+		s.log.Errorf(NewSearchAttrs(query), "%v", err)
 		return nil
 	}
 	
 	length, err := s.repo.GetDocumentsCount()
 	if err != nil {
-		s.log.Error(err.Error())
+		s.log.Errorf(NewSearchAttrs(query), "%v", err)
 		return nil
 	}
 	
@@ -87,7 +83,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 			defer wg.Done()
 	
 			idf := math.Log(float64(length) / float64(len(index[i]) + 1)) + 1
-			s.log.Info(fmt.Sprintf("len documents with word: %s, %d", words[i], len(index[i])))
+			s.log.Infof(NewSearchAttrs(query), "len documents with word: %s, %d", words[i], len(index[i]))
 			for _, item := range index[i] {
 				tokenFreq[i] += item.Count
 			}
@@ -97,7 +93,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				doc, err := s.repo.GetDocumentByID(docID)
 				if err != nil || doc == nil {
 					rankMu.RUnlock()
-					s.log.Error(fmt.Sprintf("error: %v, doc: %v", err, doc))
+					s.log.Infof(NewSearchAttrs(query), "error: %v, doc: %v", err, doc)
 					continue
 				}
 				rankMu.RUnlock()
@@ -120,7 +116,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				}
 				rank[docID] = r
 				rankMu.Unlock()
-	
+
 				resultMu.Lock()
 				if _, exists := alreadyIncluded[doc.Id]; exists {
 					resultMu.Unlock()
@@ -138,13 +134,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		close(done)
 	}()
 	
-	s.log.Info(fmt.Sprintf("result len: %d", len(result)))
+	s.log.Infof(NewSearchAttrs(query), "result len: %d", len(result))
 	
 	<-done
 
 	length = len(result)
 	if length == 0 {
-		s.log.Info("empty result")
+		s.log.Infof(NewSearchAttrs(query), "empty result")
 		return nil
 	}
 
@@ -167,8 +163,4 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	})
 
 	return topN
-}
-
-func TruncateToTwoDecimalPlaces(f float64) float64 {
-	return math.Trunc(f*100) / 100
 }

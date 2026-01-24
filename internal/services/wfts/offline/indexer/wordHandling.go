@@ -28,7 +28,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 
 		allWordTokens = append(allWordTokens, orig...)
 		for _, w := range stemmed {
-			if w.Type == textHandling.NUMBER || len(w.Value) > 64 {
+			if len(w.Value) > 64 {
 				continue
 			}
 			stem[w.Value]++
@@ -45,7 +45,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 			return err
 		}
 		if simRate := calcSim(sign, conds); simRate > 0.8 {
-			idx.logger.Debug(fmt.Sprintf("finded %f similar page: %s, with word tokens len: %d", simRate, doc.URL, len(allWordTokens)))
+			idx.log.Debugf(NewIndexAttrs(doc.URL), "finded %f similar page, with word tokens len: %d", simRate, len(allWordTokens))
 			return fmt.Errorf("page already indexed")
 		}
 		if err := idx.repository.IndexDocShingles(sign); err != nil {
@@ -61,15 +61,15 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 		return err
 	}
 	if err := idx.repository.SaveDocument(doc); err != nil {
-		idx.logger.Error("error saving document: " + err.Error())
+		idx.log.Errorf(NewIndexAttrs(doc.URL), "error saving document: %v", err)
 		return err
 	}
 	if err := idx.repository.IndexNGrams(allWordTokens, idx.sc.NGramCount); err != nil {
-		idx.logger.Error("error indexing ngrams: " + err.Error())
+		idx.log.Errorf(NewIndexAttrs(doc.URL), "error indexing ngrams: %v", err)
 		return err
 	}
 	if err := idx.repository.IndexDocumentWords(doc.Id, stem, pos); err != nil {
-		idx.logger.Error("error indexing document words: " + err.Error())
+		idx.log.Errorf(NewIndexAttrs(doc.URL), "error indexing document words: %v", err)
 		return err
 	}
 
@@ -135,7 +135,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 			tmpArr := make([]string, lenWords)
 			copy(tmpArr, words)
 			idx.sc.BestReplacement(&words, wordPos, conds, scores)
-			idx.logger.Debug(fmt.Sprintf("words '%s' replaced with '%s' in query", words, words))
+			idx.log.Infof(NewQueryAttr(text), "word '%s' replaced with '%s' in query", tmpArr[wordPos], words[wordPos])
 			_, stem, err := idx.stemmer.TokenizeAndStem(words[wordPos])
 			if err != nil {
 				return nil, nil, err
