@@ -1,6 +1,9 @@
 package searcher
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -10,7 +13,7 @@ import (
 )
 
 type index interface {
-	HandleTextQuery(string) ([]string, []map[[32]byte]model.WordCountAndPositions, error)
+	HandleTextQuery(context.Context, string) ([]string, []map[[32]byte]model.WordCountAndPositions, error)
 	GetAVGLen() (float64, error)
 }
 
@@ -20,16 +23,16 @@ type resitory interface {
 }
 
 type Searcher struct {
-	log 		*model.Logger
 	mu         	*sync.RWMutex
+	wr 			io.Writer
 	idx 		index
 	repo 	 	resitory
 }
 
-func NewSearcher(log *model.Logger, idx index, repo resitory) *Searcher {
+func NewSearcher(idx index, wr io.Writer, repo resitory) *Searcher {
 	return &Searcher{
-		log: 		log,
 		mu:        	&sync.RWMutex{},
+		wr: 		wr,
 		idx:       	idx,
 		repo: 	 	repo,
 	}
@@ -48,9 +51,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	
-	words, index, err := s.idx.HandleTextQuery(query)
+	log := model.NewLogger(slog.New(slog.NewJSONHandler(s.wr, &slog.HandlerOptions{
+		ReplaceAttr: model.Replacer,
+	})).With(slog.String("query", query)))
+	searchContext := context.WithValue(context.Background(), 0, log)
+	words, index, err := s.idx.HandleTextQuery(searchContext, query)
 	if err != nil {
-		s.log.Errorf(NewSearchAttrs(query), "handling words error: %v",  err)
+		log.Errorf("handling words error: %v",  err)
 		return nil
 	}
 	
@@ -58,13 +65,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 	
 	avgLen, err := s.idx.GetAVGLen()
 	if err != nil {
-		s.log.Errorf(NewSearchAttrs(query), "%v", err)
+		log.Errorf("%v", err)
 		return nil
 	}
 	
 	length, err := s.repo.GetDocumentsCount()
 	if err != nil {
-		s.log.Errorf(NewSearchAttrs(query), "%v", err)
+		log.Errorf("%v", err)
 		return nil
 	}
 	
@@ -83,7 +90,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 			defer wg.Done()
 	
 			idf := math.Log(float64(length) / float64(len(index[i]) + 1)) + 1
-			s.log.Infof(NewSearchAttrs(query), "len documents with word: %s, %d", words[i], len(index[i]))
+			log.Infof("len documents with word: %s, %d", words[i], len(index[i]))
 			for _, item := range index[i] {
 				tokenFreq[i] += item.Count
 			}
@@ -93,7 +100,7 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 				doc, err := s.repo.GetDocumentByID(docID)
 				if err != nil || doc == nil {
 					rankMu.RUnlock()
-					s.log.Infof(NewSearchAttrs(query), "error: %v, doc: %v", err, doc)
+					log.Infof("error: %v, doc: %v", err, doc)
 					continue
 				}
 				rankMu.RUnlock()
@@ -134,13 +141,13 @@ func (s *Searcher) Search(query string, maxLen int) []*model.Document {
 		close(done)
 	}()
 	
-	s.log.Infof(NewSearchAttrs(query), "result len: %d", len(result))
+	log.Infof("result len: %d", len(result))
 	
 	<-done
 
 	length = len(result)
 	if length == 0 {
-		s.log.Infof(NewSearchAttrs(query), "empty result")
+		log.Infof("empty result")
 		return nil
 	}
 

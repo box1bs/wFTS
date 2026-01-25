@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"fmt"
-	"io"
 	"sync"
 
 	"wfts/configs"
@@ -42,19 +41,17 @@ type repository interface {
 type indexer struct {
 	stemmer 	*textHandling.EnglishStemmer
 	sc 			*spellChecker.SpellChecker
-	log			*model.Logger
 	minHash 	*minHash
 	mu 			*sync.RWMutex
 	repository 	repository
 }
 
-func NewIndexer(repo repository, log *model.Logger, wr io.Writer, config *configs.ConfigData) *indexer {
+func NewIndexer(repo repository, config *configs.ConfigData) *indexer {
 	return &indexer{
 		stemmer:   	textHandling.NewEnglishStemmer(),
+		sc: 		spellChecker.NewSpellChecker(config.MaxTypo, config.NGramCount),
 		mu: 		new(sync.RWMutex),
 		repository: repo,
-		sc: 		spellChecker.NewSpellChecker(config.MaxTypo, config.NGramCount),
-		log: log,
 	}
 }
 

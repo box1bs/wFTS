@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"runtime"
-	"time"
 )
 
 type Logger struct {
@@ -18,22 +16,28 @@ func NewLogger(log *slog.Logger) *Logger {
 	}
 }
 
-func (l *Logger) logf(slogAttrs []slog.Attr, level slog.Level, format string, args ...any) {
-	var pcs [1]uintptr
-	runtime.Callers(2, pcs[:])
-	r := slog.NewRecord(time.Now(), level, fmt.Sprintf(format, args...), pcs[0])
-	r.AddAttrs(slogAttrs...)
-	l.log.Handler().Handle(context.Background(), r)
+func Replacer(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.String("time", a.Value.Time().Format("2006-01-02 15:04:05"))
+	}
+	return a
 }
 
-func (l *Logger) Infof(slogAttrs []slog.Attr, format string, args ...any) {
-	l.logf(slogAttrs, slog.LevelDebug, format, args...)
+func (l *Logger) logf(level slog.Level, format string, args ...any) {
+	if !l.log.Enabled(context.Background(), level) {
+		return
+	}
+	l.log.Log(context.Background(), level, fmt.Sprintf(format, args...))
 }
 
-func (l *Logger) Debugf(slogAttrs []slog.Attr, format string, args ...any) {
-	l.logf(slogAttrs, slog.LevelDebug, format, args...)
+func (l *Logger) Infof(format string, args ...any) {
+	l.logf(slog.LevelDebug, format, args...)
 }
 
-func (l *Logger) Errorf(slogAttrs []slog.Attr, format string, args ...any) {
-	l.logf(slogAttrs, slog.LevelError, format, args...)
+func (l *Logger) Debugf(format string, args ...any) {
+	l.logf(slog.LevelDebug, format, args...)
+}
+
+func (l *Logger) Errorf(format string, args ...any) {
+	l.logf(slog.LevelError, format, args...)
 }

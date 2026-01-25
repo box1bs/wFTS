@@ -25,17 +25,21 @@ type linkToken struct {
 	SameDomain 	bool
 }
 
-func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm string, gd int) ([]*linkToken, error) {
+func (ws *WebScraper) fetchHTMLcontent(ctx context.Context, cur *url.URL, norm string, gd int) ([]*linkToken, error) {
 	ws.rlMu.RLock()
 	rl := ws.rlMap[cur.Host]
 	ws.rlMu.RUnlock()
 	doc, err := ws.getHTML(ctx, cur.String(), rl, numOfTries)
+	log, ok := ctx.Value(0).(*model.Logger)
+	if !ok || log == nil {
+		return nil, fmt.Errorf("context canceled")
+	}
     if err != nil {
-		ws.log.Errorf(NewCrawlAttrs(cur.String()), "error getting html: %v", err)
+		log.Errorf("error getting html: %v", err)
         return nil, err
     }
 	if doc == "" {
-		ws.log.Debugf(NewCrawlAttrs(cur.String()), "empty html content")
+		log.Debugf("empty html content")
         return nil, fmt.Errorf("empty html content on page: %s", cur)
 	}
 	
@@ -52,7 +56,7 @@ func (ws *WebScraper) fetchHTMLcontent(cur *url.URL, ctx context.Context, norm s
 		ws.lru.Put(hashed, links)
 	}
 
-	return links, ws.idx.HandleDocumentWords(document, passages)
+	return links, ws.idx.HandleDocumentWords(ctx, document, passages)
 }
 
 func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, currentDeep int) (links []*linkToken, pasages []model.Passage) {
@@ -66,6 +70,8 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 	ws.rlMu.RLock()
 	rules := ws.rulesMap[truncatePort(baseURL)]
 	ws.rlMu.RUnlock()
+
+	log := ctx.Value(0).(*model.Logger)
 
 	tokenCount := 0
 	const checkContextEvery = 10
@@ -88,7 +94,7 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 			if tokenizer.Err() == io.EOF {
 				break
 			}
-			ws.log.Errorf(NewCrawlAttrs(baseURL.String()), "error parsing HTML")
+			log.Errorf("error parsing HTML")
 			break
 		}
 
@@ -125,12 +131,12 @@ func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, b
 						if link != "" {
 							normalized, err := normalizeUrl(link)
 							if err != nil {
-								ws.log.Errorf(NewCrawlAttrs(link), "error normalizing url: %v", err)
+								log.Errorf("error normalizing url: %v", err)
 								break
 							}
 							uri, err := url.Parse(link)
 							if err != nil || uri == nil {
-								ws.log.Errorf(NewCrawlAttrs(link), "error parsing link: %v", err)
+								log.Errorf("error parsing link: %v", err)
 								break
 							}
 							if rules != nil {

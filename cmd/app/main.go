@@ -51,7 +51,6 @@ func main() {
 	defer out.Close()
 
 	log := model.NewLogger(slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
-		AddSource: true,
 		ReplaceAttr: model.Replacer,
 	})))
 
@@ -73,16 +72,10 @@ func main() {
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, log, out, cfg)
+	i := indexer.NewIndexer(ir, cfg)
 	if !*indexFlag {
 		mp := new(sync.Map)
-		ws := scraper.NewScraper(mp, &scraper.ConfigData{
-			StartURLs: cfg.BaseURLs,
-			WorkersNum: cfg.WorkersCount,
-			HeapCap: cfg.TasksCount,
-			Depth: cfg.MaxDepth,
-			OnlySameDomain: cfg.OnlySameDomain,
-		}, i, log, ctx)
+		ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, out, cfg.TasksCount, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
 		if err := i.Index(mp, ws); err != nil {
 			panic(err)
 		}
@@ -95,7 +88,7 @@ func main() {
 
 	fmt.Printf("Index built with %d documents. Enter search queries (q to exit):\n", count)
 
-	s := searcher.NewSearcher(log, i, ir)
+	s := searcher.NewSearcher(i, out, ir)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -127,7 +120,6 @@ func Present(docs []*model.Document) {
 func initGUI(cfg *configs.ConfigData, indexF bool) {
 	lc := tui.NewLogChannel(cfg.LogChannelSize)
 	log := model.NewLogger(slog.New(slog.NewJSONHandler(lc, &slog.HandlerOptions{
-		AddSource: true,
 		ReplaceAttr: model.Replacer,
 	})))
 	ir, err := repository.NewIndexRepository(cfg.IndexPath, log, cfg.ChunkSize)
@@ -146,24 +138,18 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 		//os.Exit(1)
 	}()
 
-	i := indexer.NewIndexer(ir, log, lc, cfg)
+	i := indexer.NewIndexer(ir, cfg)
 	if !indexF {
 		go func() {
 			mp := new(sync.Map)
-			ws := scraper.NewScraper(mp, &scraper.ConfigData{
-				StartURLs: cfg.BaseURLs,
-				WorkersNum: cfg.WorkersCount,
-				HeapCap: cfg.TasksCount,
-				Depth: cfg.MaxDepth,
-				OnlySameDomain: cfg.OnlySameDomain,
-			}, i, log, ctx)
+			ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, lc, cfg.TasksCount, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
 			if err := i.Index(mp, ws); err != nil {
 				panic(err)
 			}
 		}()
 	}
 
-	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(log, i, ir).Search, c)
+	model := tui.InitModel(lc, cfg.TUIBorderColor, ir.GetDocumentsCount, searcher.NewSearcher(i, lc, ir).Search, c)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		panic(err)
 	}

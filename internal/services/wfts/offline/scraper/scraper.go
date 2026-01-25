@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"io"
+	"log/slog"
 
 	"wfts/internal/model"
 	"wfts/internal/services/wfts/offline/scraper/lruCache"
@@ -18,7 +20,7 @@ import (
 )
 
 type indexer interface {
-    HandleDocumentWords(*model.Document, []model.Passage) error
+    HandleDocumentWords(context.Context, *model.Document, []model.Passage) error
 	SaveUrlsToBank([32]byte, []byte) error
 	GetUrlsByHash([32]byte) ([]byte, error)
 }
@@ -26,23 +28,34 @@ type indexer interface {
 type WebScraper struct {
 	client         	*http.Client
 	visited        	*sync.Map
-	cfg 		  	*ConfigData
+	cfg 		  	*configData
 	rlMu         	*sync.RWMutex
 	lru 			*lrucache.LRUCache
 	pool           	*workerPool.WorkerPool
-	log 			*model.Logger
 	idx 			indexer
 	globalCtx		context.Context
 	rlMap			map[string]*rateLimiter
 	rulesMap		map[string]*parser.RobotsTxt
 }
 
-type ConfigData struct {
+type configData struct {
 	StartURLs     	[]string
+	LogOutput 		io.Writer
 	HeapCap 		int
 	WorkersNum 		int
 	Depth       	int
 	OnlySameDomain  bool
+}
+
+func NewScrapeConfig(baseUrls []string, logWriter io.Writer, heapCap, workerNum, depth int, onlySameDomain bool) *configData {
+	return &configData{
+		StartURLs: baseUrls,
+		LogOutput: logWriter,
+		HeapCap: heapCap,
+		WorkersNum: workerNum,
+		Depth: depth,
+		OnlySameDomain: onlySameDomain,
+	}
 }
 
 const (
@@ -52,7 +65,7 @@ const (
 	numOfTries = 3 // если кто то решил поменять это на 0, чтож, удачи
 )
 
-func NewScraper(mp *sync.Map, cfg *ConfigData, idx indexer, log *model.Logger, c context.Context) *WebScraper {
+func NewScraper(mp *sync.Map, cfg *configData, idx indexer, c context.Context) *WebScraper {
 	return &WebScraper{
 		client: &http.Client{
 			Timeout: deadlineTime,
@@ -67,7 +80,6 @@ func NewScraper(mp *sync.Map, cfg *ConfigData, idx indexer, log *model.Logger, c
 		rlMu:           new(sync.RWMutex),
 		lru: 			lrucache.NewLRUCache(cfg.WorkersNum * 10),
 		pool:           workerPool.NewWorkerPool(cfg.WorkersNum, cfg.HeapCap, c),
-		log: 			log,	
 		idx: 			idx,
 		globalCtx:		c,
 		rlMap: 			make(map[string]*rateLimiter),
@@ -79,25 +91,28 @@ func (ws *WebScraper) Run() {
 	defer ws.putDownLimiters()
 	for _, uri := range ws.cfg.StartURLs {
 		parsed, err := url.Parse(uri)
+		log := model.NewLogger(slog.New(slog.NewJSONHandler(ws.cfg.LogOutput, &slog.HandlerOptions{
+			ReplaceAttr: model.Replacer,
+		})).With("url", uri))
 		if err != nil {
-			ws.log.Errorf(NewCrawlAttrs(uri), "parsing url failed: %v", err)
+			log.Errorf("parsing url failed: %v", err)
 			continue
 		}
 		ws.pool.Submit(model.CrawlNode{Activation: func() {
-			ctx, cancel := context.WithTimeout(ws.globalCtx, crawlTime)
-			defer cancel()
 			ws.rlMu.Lock()
 			rl := NewRateLimiter(DefaultDelay)
 			ws.rlMap[parsed.Host] = rl
 			ws.rlMu.Unlock()
-			ws.ScrapeWithContext(ctx, parsed, 0)
+			ctx, cancel := context.WithTimeout(context.WithValue(ws.globalCtx, 0, log), crawlTime)
+			ws.ScrapeWithContext(ctx, cancel, parsed, 0)
 		}})
 	}
 	ws.pool.Wait()
 	ws.pool.Stop()
 }
 
-func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL, depth int) {
+func (ws *WebScraper) ScrapeWithContext(ctx context.Context, cancel context.CancelFunc, currentURL *url.URL, depth int) {
+	defer cancel()
     if ws.checkContext(ctx) {return}
 
     if depth >= ws.cfg.Depth {
@@ -121,6 +136,11 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 	ws.rlMu.Unlock()
 	hashed := sha256.Sum256([]byte(normalized))
 	load := false
+
+	log := ctx.Value(0).(*model.Logger)
+	if log == nil {
+		return
+	}
     
 	if len(links) == 0 && (err == nil || err.Error() != BaseXMLPageError) {
 		if prevDepth, loaded := ws.visited.LoadOrStore(normalized, depth); loaded && prevDepth.(int) <= depth {
@@ -133,12 +153,12 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 				encoded, err := ws.idx.GetUrlsByHash(hashed)
 				if err != nil {
 					if err.Error() != "Key not found" {
-						ws.log.Errorf(NewCrawlAttrs(currentURL.String()), "error getting urls, from db: %v", err)
+						log.Errorf("error getting urls, from db: %v", err)
 					}
 					return
 				}
 				if err := gob.NewDecoder(bytes.NewBuffer(encoded)).Decode(&links); err != nil {
-					ws.log.Errorf(NewCrawlAttrs(currentURL.String()), "error unmarshalling urls from db: %v", err)
+					log.Errorf("error unmarshalling urls from db: %v", err)
 					return
 				}
 				if len(links) != 0 {
@@ -146,47 +166,48 @@ func (ws *WebScraper) ScrapeWithContext(ctx context.Context, currentURL *url.URL
 				}
 			}
 		} else {
-			links, err = ws.fetchHTMLcontent(currentURL, ctx, normalized, depth)
+			links, err = ws.fetchHTMLcontent(ctx, currentURL, normalized, depth)
 			if err != nil {
 				return
 			}
 		}
 		
 		if len(links) == 0 {
-			ws.log.Debugf(NewCrawlAttrs(currentURL.String()), "empty links")
+			log.Debugf("empty links")
 			return
 		}
 
 		if !load {
 			var buf bytes.Buffer
 			if err := gob.NewEncoder(&buf).Encode(links); err != nil {
-				ws.log.Errorf(NewCrawlAttrs(currentURL.String()), "error marshalling urls: %v", err)
+				log.Errorf("error marshalling urls: %v", err)
 				return
 			}
 
 			if err := ws.idx.SaveUrlsToBank(hashed, buf.Bytes()); err != nil {
-				ws.log.Errorf(NewCrawlAttrs(currentURL.String()), "error saving urls: %v", err)
+				log.Errorf("error saving urls: %v", err)
 				return
 			}
 		}
 	}
 	
+	cancel() // для гарантированного шатдауна контекста при синхронной обработке
 	for _, link := range links {	
 		if ws.cfg.OnlySameDomain && !link.SameDomain {
 			continue
 		}
-
-		if ws.checkContext(ctx) { return }
 
         ws.pool.Submit(model.CrawlNode{Activation: func() {
 			ws.rlMu.Lock()
 			if ws.rlMap[link.Link.Host] == nil {
 				ws.rlMap[link.Link.Host] = NewRateLimiter(DefaultDelay)
 			}
-			c, cancel := context.WithTimeout(context.WithValue(ws.globalCtx, "url", link.Link), crawlTime)
-			defer cancel()
 			ws.rlMu.Unlock()
-			ws.ScrapeWithContext(c, link.Link, depth+1)
+			log := model.NewLogger(slog.New(slog.NewJSONHandler(ws.cfg.LogOutput, &slog.HandlerOptions{
+				ReplaceAttr: model.Replacer,
+			})).With("url", link.Link.String()))
+			c, cancel := context.WithTimeout(context.WithValue(ws.globalCtx, 0, log), crawlTime)
+			ws.ScrapeWithContext(c, cancel, link.Link, depth + 1)
 		},
 			Depth: depth,
 			SameDomain: link.SameDomain,
@@ -205,12 +226,6 @@ func (ws *WebScraper) putDownLimiters() {
 func (ws *WebScraper) checkContext(ctx context.Context) bool {
 	select {
 		case <-ctx.Done():
-			select {
-			case <-ws.globalCtx.Done(): // чтоб не выводилась куча логов при остановке кровлинга
-				return true
-			default:
-			}
-			ws.log.Debugf(NewCrawlAttrs(ctx.Value("url").(*url.URL).String()), "context canceled")
 			return true
 		default:
 	}

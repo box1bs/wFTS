@@ -1,14 +1,16 @@
 package indexer
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"math"
 
-	"wfts/internal/services/wfts/offline/indexer/textHandling"
 	"wfts/internal/model"
+	"wfts/internal/services/wfts/offline/indexer/textHandling"
 )
 
-func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Passage) error {
+func (idx *indexer) HandleDocumentWords(ctx context.Context, doc *model.Document, passages []model.Passage) error {
 	stem := map[string]int{}
 	i := 0
 	pos := map[string][]model.Position{}
@@ -16,6 +18,10 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
+	logger := ctx.Value(0).(*model.Logger)
+	if logger == nil {
+		return fmt.Errorf("context canceled")
+	}
 	allWordTokens := []string{}
 	for _, passage := range passages {
 		orig, stemmed, err := idx.stemmer.TokenizeAndStem(passage.Text)
@@ -45,7 +51,7 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 			return err
 		}
 		if simRate := calcSim(sign, conds); simRate > 0.8 {
-			idx.log.Debugf(NewIndexAttrs(doc.URL), "finded %f similar page, with word tokens len: %d", simRate, len(allWordTokens))
+			logger.Debugf("finded %f similar page, with word tokens len: %d", simRate, len(allWordTokens))
 			return fmt.Errorf("page already indexed")
 		}
 		if err := idx.repository.IndexDocShingles(sign); err != nil {
@@ -61,24 +67,29 @@ func (idx *indexer) HandleDocumentWords(doc *model.Document, passages []model.Pa
 		return err
 	}
 	if err := idx.repository.SaveDocument(doc); err != nil {
-		idx.log.Errorf(NewIndexAttrs(doc.URL), "error saving document: %v", err)
+		logger.Errorf("error saving document: %v", err)
 		return err
 	}
 	if err := idx.repository.IndexNGrams(allWordTokens, idx.sc.NGramCount); err != nil {
-		idx.log.Errorf(NewIndexAttrs(doc.URL), "error indexing ngrams: %v", err)
+		logger.Errorf("error indexing ngrams: %v", err)
 		return err
 	}
 	if err := idx.repository.IndexDocumentWords(doc.Id, stem, pos); err != nil {
-		idx.log.Errorf(NewIndexAttrs(doc.URL), "error indexing document words: %v", err)
+		logger.Errorf("error indexing document words: %v", err)
 		return err
 	}
 
 	return nil
 }
 
-func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model.WordCountAndPositions, error) {
+func (idx *indexer) HandleTextQuery(ctx context.Context, text string) ([]string, []map[[32]byte]model.WordCountAndPositions, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+
+	logger := ctx.Value(0).(*slog.Logger)
+	if logger == nil {
+		return nil, nil, fmt.Errorf("context canceled")
+	}
 	reverthIndex := []map[[32]byte]model.WordCountAndPositions{}
 	words, stemmed, err := idx.stemmer.TokenizeAndStem(text)
 	lenStem := len(stemmed)
@@ -135,7 +146,7 @@ func (idx *indexer) HandleTextQuery(text string) ([]string, []map[[32]byte]model
 			tmpArr := make([]string, lenWords)
 			copy(tmpArr, words)
 			idx.sc.BestReplacement(&words, wordPos, conds, scores)
-			idx.log.Infof(NewQueryAttr(text), "word '%s' replaced with '%s' in query", tmpArr[wordPos], words[wordPos])
+			logger.Info("word '%s' replaced with '%s'", tmpArr[wordPos], words[wordPos])
 			_, stem, err := idx.stemmer.TokenizeAndStem(words[wordPos])
 			if err != nil {
 				return nil, nil, err
