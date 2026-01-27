@@ -26,7 +26,7 @@ type IndexRepository struct {
 
 func NewIndexRepository(path string, log *model.Logger, chunkSize int) (*IndexRepository, error) {
 	db, err := badger.Open(badger.DefaultOptions(path).WithLoggingLevel(badger.WARNING))
-	db.CacheMaxCost(badger.BlockCache, 64 << 20)
+	db.CacheMaxCost(badger.BlockCache, 128 << 20)
 	if err != nil {
 		return nil, err
 	}

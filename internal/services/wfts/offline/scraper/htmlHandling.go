@@ -25,22 +25,22 @@ type linkToken struct {
 	SameDomain 	bool
 }
 
-func (ws *WebScraper) fetchHTMLcontent(ctx context.Context, cur *url.URL, norm string, gd int) ([]*linkToken, error) {
+func (ws *WebScraper) fetchHTMLcontent(ctx context.Context, cur *url.URL, norm string, gd int) ([]*linkToken, int, error) {
 	ws.rlMu.RLock()
 	rl := ws.rlMap[cur.Host]
 	ws.rlMu.RUnlock()
 	doc, err := ws.getHTML(ctx, cur.String(), rl, numOfTries)
-	log, ok := ctx.Value(0).(*model.Logger)
-	if !ok || log == nil {
-		return nil, fmt.Errorf("context canceled")
+	log := ctx.Value(0).(*model.Logger)
+	if log == nil {
+		return nil, 0, fmt.Errorf("context canceled")
 	}
     if err != nil {
 		log.Errorf("error getting html: %v", err)
-        return nil, err
+        return nil, 0, err
     }
 	if doc == "" {
 		log.Debugf("empty html content")
-        return nil, fmt.Errorf("empty html content on page: %s", cur)
+        return nil, 0, fmt.Errorf("empty html content on page: %s", cur)
 	}
 	
 	hashed := sha256.Sum256([]byte(norm))
@@ -56,7 +56,11 @@ func (ws *WebScraper) fetchHTMLcontent(ctx context.Context, cur *url.URL, norm s
 		ws.lru.Put(hashed, links)
 	}
 
-	return links, ws.idx.HandleDocumentWords(ctx, document, passages)
+	uniqTokenCount, err := ws.idx.HandleDocumentWords(ctx, document, passages)
+	if err != nil {
+		return nil, 0, err
+	}
+	return links, uniqTokenCount, err
 }
 
 func (ws *WebScraper) parseHTMLStream(ctx context.Context, htmlContent string, baseURL *url.URL, currentDeep int) (links []*linkToken, pasages []model.Passage) {

@@ -75,7 +75,7 @@ func main() {
 	i := indexer.NewIndexer(ir, cfg)
 	if !*indexFlag {
 		mp := new(sync.Map)
-		ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, out, cfg.TasksCount, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
+		ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, out, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
 		if err := i.Index(mp, ws); err != nil {
 			panic(err)
 		}
@@ -142,7 +142,7 @@ func initGUI(cfg *configs.ConfigData, indexF bool) {
 	if !indexF {
 		go func() {
 			mp := new(sync.Map)
-			ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, lc, cfg.TasksCount, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
+			ws := scraper.NewScraper(mp, scraper.NewScrapeConfig(cfg.BaseURLs, lc, cfg.WorkersCount, cfg.MaxDepth, cfg.OnlySameDomain), i, ctx)
 			if err := i.Index(mp, ws); err != nil {
 				panic(err)
 			}

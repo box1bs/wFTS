@@ -48,6 +48,5 @@ func NewTypeTextObj[T Passage | Position](t byte, text string, i int) T {
 
 type CrawlNode struct {
 	Activation 	func()
-	Depth 		int
-	SameDomain 	bool
+	Priority 	float64
 }
